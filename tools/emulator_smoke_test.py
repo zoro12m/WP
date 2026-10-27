@@ -131,8 +131,10 @@ def main():
     log = adb("logcat", "-d", "-v", "brief", check=False)
     (OUT / "logcat.txt").write_text(log)
     lines = log.splitlines()
-    coil_errors = [line for line in lines if "Coil" in line and "Failed" in line]
-    successes = sum(1 for line in lines if "Coil" in line and "Successful" in line)
+    # Coil's DebugLogger (debug builds only) logs each load under the RealImageLoader tag.
+    coil_lines = [line for line in lines if "RealImageLoader" in line]
+    coil_errors = [line for line in coil_lines if "Failed" in line]
+    successes = sum(1 for line in coil_lines if "Successful" in line)
     print(f"Coil: {successes} images loaded, {len(coil_errors)} failed")
     for line in coil_errors[:10]:
         print("  ", line)
