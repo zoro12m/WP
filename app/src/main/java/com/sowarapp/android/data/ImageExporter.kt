@@ -3,7 +3,6 @@ package com.sowarapp.android.data
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -18,6 +17,12 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
+import coil3.ImageLoader
+import coil3.request.ErrorResult
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import coil3.request.allowHardware
+import coil3.toBitmap
 import com.sowarapp.android.data.model.SowarImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -26,13 +31,19 @@ import java.io.FileOutputStream
 import java.io.OutputStream
 
 /**
- * Turns a [SowarImage] into a real JPEG file (background + Arabic caption)
- * and either saves it to the gallery or prepares it for sharing.
+ * Turns a [SowarImage] into a real JPEG file (the photo, plus its Arabic caption when
+ * [SowarImage.showCaption] is true) and either saves it to the gallery or prepares it for sharing.
+ *
+ * The photo comes through the same [imageLoader] as the screens, so an image you are
+ * already looking at is taken from the cache instead of being downloaded again.
  *
  * The caption is drawn with Android's own text engine, so Arabic letters
  * are joined and ordered correctly.
  */
-class ImageExporter(private val context: Context) {
+class ImageExporter(
+    private val context: Context,
+    private val imageLoader: ImageLoader,
+) {
 
     /** Saves the image to Pictures/SowarApp so it shows up in the phone's gallery. */
     suspend fun saveToGallery(image: SowarImage) = withContext(Dispatchers.IO) {
@@ -62,10 +73,27 @@ class ImageExporter(private val context: Context) {
         FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
     }
 
-    private fun renderImage(image: SowarImage): Bitmap {
-        val options = BitmapFactory.Options().apply { inMutable = true }
-        val bitmap = BitmapFactory.decodeResource(context.resources, image.imageRes, options)
-            ?: error("Could not decode image ${image.id}")
+    private suspend fun renderImage(image: SowarImage): Bitmap {
+        val bitmap = loadBitmap(image)
+        if (image.showCaption && image.caption.isNotBlank()) drawCaption(bitmap, image.caption)
+        return bitmap
+    }
+
+    /** Downloads (or reads from cache) the full image as a bitmap we are allowed to draw on. */
+    private suspend fun loadBitmap(image: SowarImage): Bitmap {
+        val request = ImageRequest.Builder(context)
+            .data(image.imageUrl)
+            .size(MAX_EXPORT_SIZE, MAX_EXPORT_SIZE)
+            // Hardware bitmaps live on the GPU and can't be drawn on or saved as JPEG.
+            .allowHardware(false)
+            .build()
+        return when (val result = imageLoader.execute(request)) {
+            is SuccessResult -> result.image.toBitmap().copy(Bitmap.Config.ARGB_8888, true)
+            is ErrorResult -> throw result.throwable
+        }
+    }
+
+    private fun drawCaption(bitmap: Bitmap, caption: String) {
         val canvas = Canvas(bitmap)
 
         val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -77,7 +105,7 @@ class ImageExporter(private val context: Context) {
         }
         val textWidth = (bitmap.width * CAPTION_WIDTH_RATIO).toInt()
         val layout = StaticLayout.Builder
-            .obtain(image.caption, 0, image.caption.length, textPaint, textWidth)
+            .obtain(caption, 0, caption.length, textPaint, textWidth)
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
             .build()
 
@@ -88,7 +116,6 @@ class ImageExporter(private val context: Context) {
         )
         layout.draw(canvas)
         canvas.restore()
-        return bitmap
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)
@@ -144,5 +171,7 @@ class ImageExporter(private val context: Context) {
         private const val SHARE_FOLDER = "shared_images"
         private const val MIME_TYPE = "image/jpeg"
         private const val JPEG_QUALITY = 92
+        /** Big enough for WhatsApp and phone screens, small enough not to run out of memory. */
+        private const val MAX_EXPORT_SIZE = 2048
     }
 }

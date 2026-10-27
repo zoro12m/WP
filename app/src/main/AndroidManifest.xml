@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Images and the catalog are downloaded from the internet. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- Only needed on Android 9 and older to save images to the gallery.
          Android 10+ saves through MediaStore without any permission. -->
     <uses-permission

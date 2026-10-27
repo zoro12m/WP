@@ -86,7 +86,17 @@ fun HomeScreen(
             )
         }
 
-        if (viewModel.isSearching) {
+        if (!viewModel.isLoaded) {
+            // The catalog is being read; this takes a split second.
+        } else if (viewModel.categories.isEmpty()) {
+            fullWidthItem {
+                EmptyState(
+                    icon = Icons.Filled.Search,
+                    title = stringResource(R.string.catalog_empty_title),
+                    message = stringResource(R.string.catalog_empty_message),
+                )
+            }
+        } else if (viewModel.isSearching) {
             searchResults(viewModel.searchResults, onImageClick)
         } else {
             categoriesSection(viewModel.categories, viewModel.imageCounts, onCategoryClick)

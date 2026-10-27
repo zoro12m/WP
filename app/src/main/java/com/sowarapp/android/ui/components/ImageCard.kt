@@ -25,9 +25,9 @@ fun ImageCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = modifier
             .aspectRatio(IMAGE_ASPECT_RATIO)
-            .semantics { contentDescription = image.caption },
+            .semantics { contentDescription = image.description },
     ) {
-        CaptionedImage(image = image, modifier = Modifier.fillMaxSize())
+        CaptionedImage(image = image, useThumbnail = true, modifier = Modifier.fillMaxSize())
     }
 }
 

@@ -11,6 +11,8 @@
     <string name="section_search_results">نتائج البحث</string>
     <string name="category_image_count">عدد الصور: %1$d</string>
     <string name="search_empty_title">لا توجد نتائج</string>
+    <string name="catalog_empty_title">تعذّر تحميل الصور</string>
+    <string name="catalog_empty_message">تحقّق من اتصال الإنترنت ثم أعد فتح التطبيق</string>
     <string name="search_empty_message">جرّب كلمة أخرى مثل: ورد، صباح، جمعة</string>
 
     <!-- Bottom navigation -->
@@ -37,6 +39,7 @@
     <string name="message_permission_denied">يجب السماح بالوصول إلى التخزين لحفظ الصورة</string>
     <string name="message_added_favorite">أُضيفت إلى المفضلة</string>
     <string name="message_removed_favorite">أُزيلت من المفضلة</string>
+    <string name="photo_credit">الصورة: %1$s · %2$s</string>
     <string name="image_not_found">الصورة غير موجودة</string>
 
     <!-- Favorites -->

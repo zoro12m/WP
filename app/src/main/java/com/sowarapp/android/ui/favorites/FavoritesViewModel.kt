@@ -7,7 +7,8 @@ import com.sowarapp.android.data.ImageRepository
 import com.sowarapp.android.data.model.SowarImage
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.stateIn
 
 class FavoritesViewModel(
@@ -15,8 +16,10 @@ class FavoritesViewModel(
     favoritesRepository: FavoritesRepository,
 ) : ViewModel() {
 
-    /** Null while favorites are still loading from storage; then the list (possibly empty). */
-    val favoriteImages: StateFlow<List<SowarImage>?> = favoritesRepository.favoriteIds
-        .map { ids -> imageRepository.getImagesByIds(ids) }
+    /** Null while favorites and the catalog are still loading; then the list (possibly empty). */
+    val favoriteImages: StateFlow<List<SowarImage>?> = combine(
+        imageRepository.catalog.filterNotNull(),
+        favoritesRepository.favoriteIds,
+    ) { catalog, ids -> catalog.getImagesByIds(ids) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initialValue = null)
 }
