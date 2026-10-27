@@ -1,36 +1,32 @@
 package com.sowarapp.android.data
 
-import com.sowarapp.android.data.model.Category
-import com.sowarapp.android.data.model.SowarImage
+import com.sowarapp.android.data.model.Catalog
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
-/** The single place screens ask for categories and images. */
-class ImageRepository(private val dataSource: LocalImageDataSource) {
+/**
+ * The single place screens get categories and images from.
+ *
+ * On start it shows the catalog saved on the phone right away, then downloads the newest one
+ * in the background and swaps it in. Screens observe [catalog], so they update by themselves.
+ */
+class ImageRepository(
+    private val dataSource: CatalogDataSource,
+    private val scope: CoroutineScope,
+) {
+    private val _catalog = MutableStateFlow<Catalog?>(null)
 
-    fun getCategories(): List<Category> = dataSource.categories
+    /** Null while the first catalog is being read (a split second), then always a catalog. */
+    val catalog: StateFlow<Catalog?> = _catalog.asStateFlow()
 
-    fun getCategory(id: String): Category? = dataSource.categories.find { it.id == id }
-
-    fun getImagesInCategory(categoryId: String): List<SowarImage> =
-        dataSource.images.filter { it.categoryId == categoryId }
-
-    fun getPopularImages(): List<SowarImage> = dataSource.images.filter { it.isPopular }
-
-    fun getImage(id: String): SowarImage? = dataSource.images.find { it.id == id }
-
-    /** Keeps the catalog order so favorites don't jump around. */
-    fun getImagesByIds(ids: Set<String>): List<SowarImage> =
-        dataSource.images.filter { it.id in ids }
-
-    /** Matches the query against the image caption and its category title. */
-    fun search(query: String): List<SowarImage> {
-        val normalizedQuery = ArabicText.normalize(query)
-        if (normalizedQuery.isEmpty()) return emptyList()
-
-        val categoryTitles = dataSource.categories.associate { it.id to it.title }
-        return dataSource.images.filter { image ->
-            val caption = ArabicText.normalize(image.caption)
-            val categoryTitle = ArabicText.normalize(categoryTitles[image.categoryId].orEmpty())
-            normalizedQuery in caption || normalizedQuery in categoryTitle
+    fun start() {
+        scope.launch {
+            dataSource.loadOffline()?.let { _catalog.value = it }
+            val downloaded = dataSource.download()
+            _catalog.value = downloaded ?: _catalog.value ?: Catalog.EMPTY
         }
     }
 }

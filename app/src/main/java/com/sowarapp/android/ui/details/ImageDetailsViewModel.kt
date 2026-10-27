@@ -2,6 +2,10 @@ package com.sowarapp.android.ui.details
 
 import android.net.Uri
 import androidx.annotation.StringRes
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -9,6 +13,7 @@ import com.sowarapp.android.R
 import com.sowarapp.android.data.FavoritesRepository
 import com.sowarapp.android.data.ImageExporter
 import com.sowarapp.android.data.ImageRepository
+import com.sowarapp.android.data.model.Catalog
 import com.sowarapp.android.data.model.SowarImage
 import com.sowarapp.android.ui.navigation.Routes
 import kotlinx.coroutines.CancellationException
@@ -38,8 +43,17 @@ class ImageDetailsViewModel(
 
     private val imageId: String = checkNotNull(savedStateHandle[Routes.ARG_IMAGE_ID])
 
+    private var catalog by mutableStateOf<Catalog?>(null)
+
+    init {
+        viewModelScope.launch { imageRepository.catalog.collect { catalog = it } }
+    }
+
+    /** False for the split second before the catalog is read. */
+    val isLoaded: Boolean by derivedStateOf { catalog != null }
+
     /** Null if the id doesn't match any image. */
-    val image: SowarImage? = imageRepository.getImage(imageId)
+    val image: SowarImage? by derivedStateOf { catalog?.getImage(imageId) }
 
     val isFavorite: StateFlow<Boolean> = favoritesRepository.favoriteIds
         .map { ids -> imageId in ids }

@@ -55,7 +55,6 @@ import com.sowarapp.android.ui.AppViewModelProvider
 import com.sowarapp.android.ui.components.BackTopBar
 import com.sowarapp.android.ui.components.CaptionedImage
 import com.sowarapp.android.ui.components.EmptyState
-import com.sowarapp.android.ui.components.IMAGE_ASPECT_RATIO
 
 @Composable
 fun ImageDetailsScreen(
@@ -98,6 +97,7 @@ fun ImageDetailsScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         val image = viewModel.image
+        if (!viewModel.isLoaded) return@Scaffold
         if (image == null) {
             EmptyState(
                 icon = Icons.Filled.Info,
@@ -123,10 +123,20 @@ fun ImageDetailsScreen(
                 modifier = Modifier
                     .widthIn(max = 480.dp)
                     .fillMaxWidth()
-                    .aspectRatio(IMAGE_ASPECT_RATIO)
-                    .semantics { contentDescription = image.caption },
+                    // The photo's own shape, so nothing is cropped (very tall or wide photos are limited).
+                    .aspectRatio(image.aspectRatio.coerceIn(MIN_ASPECT_RATIO, MAX_ASPECT_RATIO))
+                    .semantics { contentDescription = image.description },
             ) {
                 CaptionedImage(image = image, modifier = Modifier.fillMaxSize())
+            }
+
+            image.credit?.let { credit ->
+                Text(
+                    text = stringResource(R.string.photo_credit, credit.author, credit.license),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth(),
+                )
             }
 
             if (isBusy) {
@@ -189,6 +199,9 @@ private fun ActionButton(
         }
     }
 }
+
+private const val MIN_ASPECT_RATIO = 9f / 16f
+private const val MAX_ASPECT_RATIO = 16f / 9f
 
 private fun needsStoragePermission(context: Context): Boolean =
     Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&

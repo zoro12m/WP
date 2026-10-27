@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -13,9 +14,19 @@ android {
         // Android 7.0+. Covers almost every active Android phone.
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
+
+        // Where the app downloads the list of categories and images.
+        // The same file is also bundled in the APK, so the app works on first launch offline.
+        buildConfigField(
+            "String",
+            "CATALOG_URL",
+            "\"https://raw.githubusercontent.com/zoro12m/WP/main/catalog/catalog.json\"",
+        )
     }
+
+    sourceSets["main"].assets.srcDir(rootProject.file("catalog"))
 
     buildTypes {
         release {
@@ -39,6 +50,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -58,6 +70,11 @@ dependencies {
 
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
+
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
+    implementation(libs.okhttp)
+    implementation(libs.kotlinx.serialization.json)
 
     debugImplementation(libs.androidx.ui.tooling)
 

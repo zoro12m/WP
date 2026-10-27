@@ -30,7 +30,9 @@ fun CategoryScreen(
             )
         },
     ) { innerPadding ->
-        if (viewModel.images.isEmpty()) {
+        if (!viewModel.isLoaded) {
+            // The catalog is being read; this takes a split second, so show nothing to avoid flicker.
+        } else if (viewModel.images.isEmpty()) {
             EmptyState(
                 icon = Icons.Filled.Info,
                 title = stringResource(R.string.category_empty_title),
