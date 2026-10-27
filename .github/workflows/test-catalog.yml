@@ -1,0 +1,37 @@
+# Rebuilds catalog/catalog.json (the test images) on GitHub's machines and commits it.
+# Runs when the builder script changes, or by hand from the Actions tab.
+name: Build test catalog
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths: [tools/build_test_catalog.py]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build catalog
+        run: python3 tools/build_test_catalog.py
+
+      - name: Commit catalog if it changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add catalog/catalog.json
+          if git diff --cached --quiet; then
+            echo "Catalog unchanged"
+          else
+            git commit -m "Update test catalog"
+            git push
+          fi
