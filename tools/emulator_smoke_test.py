@@ -22,7 +22,7 @@ problems = []
 
 
 def adb(*args, check=True):
-    result = subprocess.run(["adb", *args], capture_output=True, text=True)
+    result = subprocess.run(["adb", *args], capture_output=True, text=True, errors="replace")
     if check and result.returncode != 0:
         raise RuntimeError(f"adb {' '.join(args)} failed: {result.stderr}")
     return result.stdout
