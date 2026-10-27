@@ -3,6 +3,7 @@ package com.sowarapp.android
 import android.content.Context
 import coil3.ImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import coil3.util.DebugLogger
 import coil3.request.crossfade
 import com.sowarapp.android.data.CatalogDataSource
 import com.sowarapp.android.data.FavoritesRepository
@@ -32,6 +33,8 @@ class AppContainer(context: Context) {
     val imageLoader: ImageLoader = ImageLoader.Builder(context)
         .components { add(OkHttpNetworkFetcherFactory(callFactory = { httpClient })) }
         .crossfade(true)
+        // In test builds, write every image load (and why one failed) to Logcat.
+        .apply { if (BuildConfig.DEBUG) logger(DebugLogger()) }
         .build()
 
     val imageRepository = ImageRepository(
