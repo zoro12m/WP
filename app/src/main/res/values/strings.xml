@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">صور اليوم</string>
+
+    <!-- Home -->
+    <string name="home_subtitle">اختر صورة جميلة وشاركها مع من تحب</string>
+    <string name="search_hint">ابحث عن صورة أو قسم</string>
+    <string name="search_clear">مسح البحث</string>
+    <string name="section_categories">الأقسام</string>
+    <string name="section_popular">الأكثر انتشارًا</string>
+    <string name="section_search_results">نتائج البحث</string>
+    <string name="category_image_count">عدد الصور: %1$d</string>
+    <string name="search_empty_title">لا توجد نتائج</string>
+    <string name="search_empty_message">جرّب كلمة أخرى مثل: ورد، صباح، جمعة</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">الرئيسية</string>
+    <string name="nav_favorites">المفضلة</string>
+
+    <!-- Category -->
+    <string name="back">رجوع</string>
+    <string name="category_empty_title">لا توجد صور بعد</string>
+    <string name="category_empty_message">سنضيف صورًا جديدة إلى هذا القسم قريبًا</string>
+    <string name="category_not_found">القسم غير موجود</string>
+
+    <!-- Image details -->
+    <string name="details_title">تفاصيل الصورة</string>
+    <string name="action_download">تحميل</string>
+    <string name="action_share">مشاركة</string>
+    <string name="action_favorite">المفضلة</string>
+    <string name="action_add_favorite">إضافة إلى المفضلة</string>
+    <string name="action_remove_favorite">إزالة من المفضلة</string>
+    <string name="share_chooser_title">مشاركة الصورة عبر</string>
+    <string name="message_saved">تم حفظ الصورة في المعرض (Pictures/SowarApp)</string>
+    <string name="message_save_failed">تعذّر حفظ الصورة، حاول مرة أخرى</string>
+    <string name="message_share_failed">تعذّرت مشاركة الصورة، حاول مرة أخرى</string>
+    <string name="message_permission_denied">يجب السماح بالوصول إلى التخزين لحفظ الصورة</string>
+    <string name="message_added_favorite">أُضيفت إلى المفضلة</string>
+    <string name="message_removed_favorite">أُزيلت من المفضلة</string>
+    <string name="image_not_found">الصورة غير موجودة</string>
+
+    <!-- Favorites -->
+    <string name="favorites_title">المفضلة</string>
+    <string name="favorites_empty_title">لا توجد صور مفضلة</string>
+    <string name="favorites_empty_message">اضغط على زر القلب في أي صورة لحفظها هنا</string>
+</resources>
