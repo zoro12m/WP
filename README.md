@@ -52,7 +52,7 @@ The app reads [`catalog/catalog.json`](catalog/catalog.json): the list of catego
 **Adding your own photos** (no app update needed):
 
 1. In Cloudflare: **R2 → sowarapp-images → Upload**. Put each photo in a folder named after its category: `inbox/flowers/`, `inbox/good_morning/`, `inbox/good_evening/`, `inbox/wisdom/`, `inbox/jumuah/` or `inbox/occasions/`.
-2. On GitHub: **Actions → Add new images → Run workflow**.
+2. Wait: GitHub checks the inbox every 3 hours. To add them right away: **Actions → Add new images → Run workflow**.
 3. Open the app again. The new photos show at the top of their category.
 
 [`tools/add_new_images.py`](tools/add_new_images.py) resizes each photo, uploads it next to the others, adds it to the catalog without a caption (most photos already have text) and empties the inbox. Uploading the same photo twice adds it once. "Build test catalog" now runs only by hand, because it would replace these photos.
