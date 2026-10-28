@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>صور اليوم · إدارة الصور</title>
+<style>
+  :root {
+    --rose: #b5566e;
+    --rose-dark: #8e3b52;
+    --gold: #c9a45c;
+    --bg: #fbf5f3;
+    --card: #ffffff;
+    --text: #2d2326;
+    --muted: #7a6a6f;
+    --line: #ecdfe0;
+    --danger: #b3261e;
+    --ok: #2e7d32;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif; line-height: 1.5;
+  }
+  header {
+    background: linear-gradient(135deg, var(--rose), var(--rose-dark));
+    color: #fff; padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  header h1 { margin: 0; font-size: 1.25rem; }
+  header h1 span { color: #f3dca6; }
+  main { max-width: 1000px; margin: 0 auto; padding: 16px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin-bottom: 16px; }
+  h2 { margin: 0 0 12px; font-size: 1.1rem; color: var(--rose-dark); }
+  button, select, input, textarea { font: inherit; }
+  button {
+    border: 0; border-radius: 999px; padding: 10px 18px; cursor: pointer;
+    background: var(--rose); color: #fff; font-weight: 600;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  button.ghost { background: transparent; color: inherit; border: 1px solid currentColor; }
+  button.small { padding: 4px 12px; font-size: .9rem; }
+  button.danger { background: var(--danger); }
+  select, input[type=password], textarea {
+    border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: #fff; width: 100%;
+  }
+  label.row { display: flex; align-items: center; gap: 6px; font-size: .9rem; color: var(--muted); }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); font-size: .9rem; }
+  .error { color: var(--danger); }
+  .okText { color: var(--ok); }
+
+  #login { max-width: 360px; margin: 48px auto; }
+  #login form { display: grid; gap: 12px; }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+  .toolbar > * { flex: 1 1 200px; }
+  .toolbar > button { flex: 0 0 auto; }
+
+  #drop {
+    margin-top: 12px; border: 2px dashed var(--gold); border-radius: 16px; padding: 28px 16px;
+    text-align: center; color: var(--muted); cursor: pointer; background: #fffaf2;
+  }
+  #drop.over { background: #fbeedd; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-top: 12px; }
+  .tile { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; display: flex; flex-direction: column; }
+  .tile img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: block; background: #f3eaea; }
+  .tile .body { padding: 8px; display: grid; gap: 6px; }
+  .tile textarea { min-height: 54px; resize: vertical; font-size: .9rem; }
+  .tile .status { font-size: .85rem; min-height: 1.2em; }
+  .tile .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  #publishBar { position: sticky; bottom: 0; background: var(--card); padding-top: 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  #moreBtn { margin: 12px auto 0; display: block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>صور اليوم <span>· إدارة الصور</span></h1>
+  <button id="logoutBtn" class="ghost small hidden" type="button">خروج</button>
+</header>
+
+<main>
+  <section id="login" class="hidden">
+    <h2>تسجيل الدخول</h2>
+    <form id="loginForm">
+      <input id="password" type="password" autocomplete="current-password" placeholder="كلمة السر" required>
+      <button type="submit">دخول</button>
+      <div id="loginError" class="error"></div>
+    </form>
+  </section>
+
+  <div id="app" class="hidden">
+    <section>
+      <h2>إضافة صور جديدة</h2>
+      <div class="toolbar">
+        <label>القسم
+          <select id="uploadCategory"></select>
+        </label>
+      </div>
+      <div id="drop" tabindex="0" role="button">
+        اسحب الصور إلى هنا أو اضغط لاختيارها<br>
+        <span class="muted">JPG أو PNG أو WebP · تُصغَّر تلقائيًا قبل الرفع</span>
+      </div>
+      <input id="fileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden">
+      <div id="pending" class="grid"></div>
+      <div id="publishBar" class="hidden">
+        <button id="publishBtn" type="button">نشر الصور</button>
+        <button id="clearBtn" type="button" class="ghost">إلغاء الكل</button>
+        <span id="publishStatus" class="muted"></span>
+      </div>
+    </section>
+
+    <section>
+      <h2>الصور المنشورة</h2>
+      <div class="toolbar">
+        <label>القسم
+          <select id="libraryCategory"></select>
+        </label>
+        <span id="libraryCount" class="muted"></span>
+      </div>
+      <div id="library" class="grid"></div>
+      <button id="moreBtn" type="button" class="ghost hidden">عرض المزيد</button>
+    </section>
+  </div>
+</main>
+
+<script>
+"use strict";
+// Same sizes as tools/copy_images_to_r2.py, so photos look the same whichever way they were added.
+const FULL_WIDTH = 1280;
+const THUMB_WIDTH = 500;
+const QUALITY = 0.82;
+const PAGE_SIZE = 60;
+
+const $ = (id) => document.getElementById(id);
+let catalog = null;
+let pending = [];        // photos picked but not yet published
+let libraryShown = PAGE_SIZE;
+
+// ---------- Talking to the Worker ----------
+
+async function api(path, options = {}) {
+  const response = await fetch(path, { credentials: "same-origin", ...options });
+  const data = await response.json().catch(() => ({}));
+  if (response.status === 401 && path !== "/api/login") {
+    showLogin();
+    throw new Error("انتهت الجلسة، سجّل الدخول من جديد");
+  }
+  if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+  return data;
+}
+
+const sendJson = (path, method, body) =>
+  api(path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+// ---------- Signing in ----------
+
+function showLogin() {
+  $("app").classList.add("hidden");
+  $("logoutBtn").classList.add("hidden");
+  $("login").classList.remove("hidden");
+  $("password").focus();
+}
+
+$("loginForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  $("loginError").textContent = "";
+  try {
+    await sendJson("/api/login", "POST", { password: $("password").value });
+    $("password").value = "";
+    await start();
+  } catch (error) {
+    $("loginError").textContent = error.message === "Wrong password" ? "كلمة السر غير صحيحة" : error.message;
+  }
+});
+
+$("logoutBtn").addEventListener("click", async () => {
+  await sendJson("/api/logout", "POST", {});
+  showLogin();
+});
+
+async function start() {
+  try {
+    ({ catalog } = await api("/api/catalog"));
+  } catch (error) {
+    $("loginError").textContent = error.message;
+    return;
+  }
+  $("login").classList.add("hidden");
+  $("app").classList.remove("hidden");
+  $("logoutBtn").classList.remove("hidden");
+  fillCategorySelects();
+  renderLibrary();
+}
+
+function fillCategorySelects() {
+  const options = catalog.categories.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.title)}</option>`).join("");
+  const upload = $("uploadCategory");
+  const keep = upload.value;
+  upload.innerHTML = options;
+  if (keep) upload.value = keep;
+  const library = $("libraryCategory");
+  const keepLibrary = library.value;
+  library.innerHTML = `<option value="">كل الأقسام</option>` + options;
+  library.value = keepLibrary;
+}
+
+// ---------- Picking photos ----------
+
+$("drop").addEventListener("click", () => $("fileInput").click());
+$("drop").addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") $("fileInput").click(); });
+$("fileInput").addEventListener("change", () => { addFiles($("fileInput").files); $("fileInput").value = ""; });
+for (const name of ["dragenter", "dragover"]) {
+  $("drop").addEventListener(name, (event) => { event.preventDefault(); $("drop").classList.add("over"); });
+}
+for (const name of ["dragleave", "drop"]) {
+  $("drop").addEventListener(name, (event) => { event.preventDefault(); $("drop").classList.remove("over"); });
+}
+$("drop").addEventListener("drop", (event) => addFiles(event.dataTransfer.files));
+
+function addFiles(fileList) {
+  for (const file of fileList) {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
+      alert(`${file.name}: هذا النوع غير مدعوم (استعمل JPG أو PNG أو WebP)`);
+      continue;
+    }
+    const entry = { file, preview: URL.createObjectURL(file), caption: "", showCaption: false, done: false };
+    pending.push(entry);
+  }
+  renderPending();
+}
+
+function renderPending() {
+  const box = $("pending");
+  box.innerHTML = "";
+  for (const entry of pending) {
+    const tile = document.createElement("div");
+    tile.className = "tile";
+    tile.innerHTML = `
+      <img alt="">
+      <div class="body">
+        <textarea placeholder="نص اختياري (يُستعمل في البحث)"></textarea>
+        <label class="row"><input type="checkbox"> اكتب النص فوق الصورة</label>
+        <div class="actions"><button type="button" class="ghost small">إزالة</button></div>
+        <div class="status"></div>
+      </div>`;
+    tile.querySelector("img").src = entry.preview;
+    const caption = tile.querySelector("textarea");
+    const show = tile.querySelector("input[type=checkbox]");
+    caption.value = entry.caption;
+    show.checked = entry.showCaption;
+    caption.addEventListener("input", () => { entry.caption = caption.value; });
+    show.addEventListener("change", () => { entry.showCaption = show.checked; });
+    tile.querySelector("button").addEventListener("click", () => {
+      URL.revokeObjectURL(entry.preview);
+      pending = pending.filter((other) => other !== entry);
+      renderPending();
+    });
+    entry.statusEl = tile.querySelector(".status");
+    entry.tile = tile;
+    box.append(tile);
+  }
+  $("publishBar").classList.toggle("hidden", pending.length === 0);
+  $("publishStatus").textContent = pending.length ? `${pending.length} صورة جاهزة للنشر` : "";
+}
+
+$("clearBtn").addEventListener("click", () => {
+  pending.forEach((entry) => URL.revokeObjectURL(entry.preview));
+  pending = [];
+  renderPending();
+});
+
+// ---------- Shrinking and publishing ----------
+
+/** The id comes from the photo's bytes (like tools/add_new_images.py), so the same photo is only added once. */
+async function photoId(file, categoryId) {
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()));
+  const hex = Array.from(hash, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `${categoryId}_${hex.slice(0, 10)}`;
+}
+
+async function decode(file) {
+  try {
+    // Turns the photo the right way up using the camera's rotation info.
+    return await createImageBitmap(file, { imageOrientation: "from-image" });
+  } catch {
+    const img = new Image();
+    img.src = URL.createObjectURL(file);
+    await img.decode();
+    return img;
+  }
+}
+
+/** Returns { blob, ext, width, height }; never makes the photo bigger than it is. */
+async function shrink(source, maxWidth) {
+  const sourceWidth = source.naturalWidth || source.width;
+  const sourceHeight = source.naturalHeight || source.height;
+  const scale = Math.min(1, maxWidth / sourceWidth);
+  const width = Math.round(sourceWidth * scale);
+  const height = Math.round(sourceHeight * scale);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  context.imageSmoothingQuality = "high";
+  context.fillStyle = "#fff";   // transparent PNGs get a white background, like the Python tools
+  context.fillRect(0, 0, width, height);
+  context.drawImage(source, 0, 0, width, height);
+  let blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/webp", QUALITY));
+  // Some browsers (older Safari) cannot make WebP; JPEG works everywhere.
+  if (!blob || blob.type !== "image/webp") {
+    blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+    return { blob, ext: "jpg", width, height };
+  }
+  return { blob, ext: "webp", width, height };
+}
+
+async function upload(key, blob) {
+  await api(`/api/files/${key}`, { method: "PUT", headers: { "Content-Type": blob.type }, body: blob });
+}
+
+$("publishBtn").addEventListener("click", async () => {
+  const categoryId = $("uploadCategory").value;
+  const categoryTitle = catalog.categories.find((c) => c.id === categoryId)?.title || categoryId;
+  const toPublish = pending.filter((entry) => !entry.done);
+  if (!toPublish.length) return;
+  if (!confirm(`نشر ${toPublish.length} صورة في قسم «${categoryTitle}»؟`)) return;
+
+  $("publishBtn").disabled = true;
+  $("clearBtn").disabled = true;
+  const items = [];
+  let count = 0;
+  for (const entry of toPublish) {
+    count++;
+    $("publishStatus").textContent = `جارٍ رفع ${count} من ${toPublish.length}…`;
+    try {
+      entry.statusEl.textContent = "جارٍ التصغير…";
+      const id = await photoId(entry.file, categoryId);
+      const source = await decode(entry.file);
+      const full = await shrink(source, FULL_WIDTH);
+      const thumb = await shrink(source, THUMB_WIDTH);
+      const file = `images/${categoryId}/${id}.${full.ext}`;
+      const thumbFile = `thumbs/${categoryId}/${id}.${thumb.ext}`;
+      entry.statusEl.textContent = "جارٍ الرفع…";
+      await upload(file, full.blob);
+      await upload(thumbFile, thumb.blob);
+      items.push({ entry, data: {
+        id, categoryId, file, thumbFile, width: full.width, height: full.height,
+        caption: entry.caption, showCaption: entry.showCaption,
+      } });
+      entry.statusEl.textContent = "تم الرفع";
+    } catch (error) {
+      entry.statusEl.innerHTML = `<span class="error">${escapeHtml(error.message)}</span>`;
+    }
+  }
+
+  try {
+    if (items.length) {
+      $("publishStatus").textContent = "جارٍ تحديث قائمة الصور…";
+      const result = await sendJson("/api/items", "POST", { items: items.map((item) => item.data) });
+      for (const { entry, data } of items) {
+        entry.done = true;
+        const already = result.skipped.includes(data.id);
+        entry.statusEl.innerHTML = already
+          ? `<span class="muted">موجودة من قبل</span>`
+          : `<span class="okText">نُشرت ✓</span>`;
+      }
+      $("publishStatus").innerHTML =
+        `<span class="okText">نُشرت ${result.added.length} صورة.</span> ستظهر في التطبيق عند فتحه من جديد خلال دقائق.`;
+      ({ catalog } = await api("/api/catalog"));
+      renderLibrary();
+      // Published photos leave the list after a moment; failed ones stay so you can try again.
+      setTimeout(() => {
+        pending.filter((entry) => entry.done).forEach((entry) => URL.revokeObjectURL(entry.preview));
+        pending = pending.filter((entry) => !entry.done);
+        renderPending();
+      }, 4000);
+    } else {
+      $("publishStatus").innerHTML = `<span class="error">لم تُرفع أي صورة.</span>`;
+    }
+  } catch (error) {
+    $("publishStatus").innerHTML = `<span class="error">${escapeHtml(error.message)}</span>`;
+  } finally {
+    $("publishBtn").disabled = false;
+    $("clearBtn").disabled = false;
+  }
+});
+
+// ---------- Published photos ----------
+
+$("libraryCategory").addEventListener("change", () => { libraryShown = PAGE_SIZE; renderLibrary(); });
+$("moreBtn").addEventListener("click", () => { libraryShown += PAGE_SIZE; renderLibrary(); });
+
+function renderLibrary() {
+  const filter = $("libraryCategory").value;
+  const items = catalog.items.filter((item) => !filter || item.categoryId === filter);
+  $("libraryCount").textContent = `${items.length} صورة`;
+  const box = $("library");
+  box.innerHTML = "";
+  for (const item of items.slice(0, libraryShown)) box.append(libraryTile(item));
+  $("moreBtn").classList.toggle("hidden", items.length <= libraryShown);
+}
+
+function libraryTile(item) {
+  const tile = document.createElement("div");
+  tile.className = "tile";
+  tile.innerHTML = `
+    <img alt="" loading="lazy">
+    <div class="body">
+      <select></select>
+      <textarea placeholder="نص اختياري"></textarea>
+      <label class="row"><input type="checkbox" class="show"> اكتب النص فوق الصورة</label>
+      <label class="row"><input type="checkbox" class="popular"> من الأكثر شيوعًا</label>
+      <div class="actions">
+        <button type="button" class="small save">حفظ</button>
+        <button type="button" class="small danger delete">حذف</button>
+      </div>
+      <div class="status"></div>
+    </div>`;
+  tile.querySelector("img").src = item.thumbnailUrl;
+  const select = tile.querySelector("select");
+  select.innerHTML = $("uploadCategory").innerHTML;
+  select.value = item.categoryId;
+  const caption = tile.querySelector("textarea");
+  caption.value = item.caption || "";
+  const show = tile.querySelector(".show");
+  show.checked = !!item.showCaption;
+  const popular = tile.querySelector(".popular");
+  popular.checked = !!item.popular;
+  const status = tile.querySelector(".status");
+
+  tile.querySelector(".save").addEventListener("click", async () => {
+    status.textContent = "جارٍ الحفظ…";
+    try {
+      const { item: saved } = await sendJson(`/api/items/${item.id}`, "PATCH", {
+        categoryId: select.value, caption: caption.value, showCaption: show.checked, popular: popular.checked,
+      });
+      const moved = saved.categoryId !== item.categoryId;
+      Object.assign(item, saved);
+      show.checked = !!saved.showCaption;
+      status.innerHTML = `<span class="okText">حُفظ ✓</span>`;
+      if (moved && $("libraryCategory").value) renderLibrary();
+    } catch (error) {
+      status.innerHTML = `<span class="error">${escapeHtml(error.message)}</span>`;
+    }
+  });
+
+  tile.querySelector(".delete").addEventListener("click", async () => {
+    if (!confirm("حذف هذه الصورة نهائيًا من التطبيق؟")) return;
+    status.textContent = "جارٍ الحذف…";
+    try {
+      await api(`/api/items/${item.id}`, { method: "DELETE" });
+      catalog.items = catalog.items.filter((other) => other.id !== item.id);
+      renderLibrary();
+    } catch (error) {
+      status.innerHTML = `<span class="error">${escapeHtml(error.message)}</span>`;
+    }
+  });
+  return tile;
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
+// Signed in already? Then go straight to the photos; otherwise show the password box.
+api("/api/catalog").then(() => start()).catch(() => showLogin());
+</script>
+</body>
+</html>

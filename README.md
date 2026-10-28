@@ -26,7 +26,7 @@ An Arabic-first Android app for browsing greeting images (صباح الخير، 
 
 The app reads [`catalog/catalog.json`](catalog/catalog.json): the list of categories and images, with a link to each photo.
 
-- **Online:** the app downloads the newest catalog from `main` on GitHub each time it starts (`CATALOG_URL` in `app/build.gradle.kts`).
+- **Online:** the app downloads the newest catalog from the R2 bucket (`catalog/catalog.json`) each time it starts (`CATALOG_URL` in `app/build.gradle.kts`). The admin page edits that file; the repo's copy is refreshed every night by **Actions → Save catalog copy**.
 - **Offline:** it keeps the last downloaded copy on the phone, and the APK also includes a copy, so the first launch works without internet. The photos themselves still need internet the first time, and after that they come from Coil's cache.
 
 **Test images for now.** [`tools/build_test_catalog.py`](tools/build_test_catalog.py) picks photos from Wikimedia Commons "Quality images" whose license allows app use with credit (CC0, public domain, CC BY, then CC BY-SA if needed). The app shows the author and license under each photo. GitHub Actions runs the script and commits the result (**Actions → Build test catalog → Run workflow**). These images are only for testing and will be replaced by your own.
@@ -49,13 +49,14 @@ The app reads [`catalog/catalog.json`](catalog/catalog.json): the list of catego
 
 **Image hosting: Cloudflare R2.** The photos are served from an R2 bucket on our own domain (downloads from R2 are free). [`tools/copy_images_to_r2.py`](tools/copy_images_to_r2.py) downloads each photo in the catalog, makes a WebP full image (1280 px wide at most) and a 500 px thumbnail, uploads both to `images/<category>/<id>.webp` and `thumbs/<category>/<id>.webp`, and rewrites the links in the catalog. Photos already on the domain are skipped. Run it with **Actions → Copy images to R2 → Run workflow**, giving the image domain. It needs the repo secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`.
 
-**Adding your own photos** (no app update needed):
+**Adding your own photos** (no app update needed): use the **admin page**, a private web page where you drag in photos, pick a category, optionally add a caption and publish. You can also change or delete published photos there. Setup and details: [`admin/README.md`](admin/README.md).
+
+Backup way, without the admin page:
 
 1. In Cloudflare: **R2 → sowarapp-images → Upload**. Put each photo in a folder named after its category: `inbox/flowers/`, `inbox/good_morning/`, `inbox/good_evening/`, `inbox/wisdom/`, `inbox/jumuah/` or `inbox/occasions/`.
 2. On GitHub: **Actions → Add new images → Run workflow**.
-3. Open the app again. The new photos show at the top of their category.
 
-[`tools/add_new_images.py`](tools/add_new_images.py) resizes each photo, uploads it next to the others, adds it to the catalog without a caption (most photos already have text) and empties the inbox. Uploading the same photo twice adds it once. "Build test catalog" now runs only by hand, because it would replace these photos.
+[`tools/add_new_images.py`](tools/add_new_images.py) resizes each photo, uploads it next to the others, adds it to the catalog in R2 without a caption and empties the inbox. "Build test catalog" and "Copy images to R2" only edit the repo's copy now, so they no longer change what the app shows.
 
 At 10,000 images the single catalog file gets too big, so a later step will split it into pages.
 

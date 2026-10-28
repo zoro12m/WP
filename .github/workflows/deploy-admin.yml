@@ -1,0 +1,60 @@
+# Puts the admin page for adding photos (admin/) online as a Cloudflare Worker.
+# Runs when admin/ changes on main, or by hand: Actions -> Deploy admin page -> Run workflow.
+# Needs the repo secrets CLOUDFLARE_API_TOKEN and ADMIN_PASSWORD (see admin/README.md),
+# plus R2_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY.
+name: Deploy admin page
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["admin/**", ".github/workflows/deploy-admin.yml"]
+
+permissions:
+  contents: read
+
+concurrency: catalog
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # boto3 stays below 1.36, whose new upload checksums R2 did not accept at first.
+      - name: Install tools
+        run: pip install boto3==1.35.36 pillow==11.0.0
+
+      # The first time only: the app and the admin page read the catalog from R2, so put the repo's copy there.
+      - name: Put the catalog in R2 if it isn't there yet
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: python3 tools/sync_catalog.py --seed
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install wrangler
+        working-directory: admin
+        run: npm ci --no-audit --no-fund
+
+      - name: Deploy the Worker
+        working-directory: admin
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$ADMIN_PASSWORD" ]; then
+            echo "::error::Add the CLOUDFLARE_API_TOKEN and ADMIN_PASSWORD repo secrets first (see admin/README.md)"
+            exit 1
+          fi
+          npx wrangler deploy
+          printf '%s' "$ADMIN_PASSWORD" | npx wrangler secret put ADMIN_PASSWORD

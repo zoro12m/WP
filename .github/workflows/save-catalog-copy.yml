@@ -1,0 +1,46 @@
+# Copies the catalog from R2 (where the admin page edits it) into the repo, so the copy bundled
+# in the APK stays close to the real one. Runs every night, or by hand:
+# Actions -> Save catalog copy -> Run workflow.
+name: Save catalog copy
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 2 * * *"
+
+permissions:
+  contents: write
+
+concurrency: catalog
+
+jobs:
+  save:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: pip install boto3==1.35.36 pillow==11.0.0
+
+      - name: Copy the catalog from R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: python3 tools/sync_catalog.py --pull
+
+      - name: Commit catalog if it changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add catalog/catalog.json
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "Save catalog copy from R2"
+            git push
+          fi
