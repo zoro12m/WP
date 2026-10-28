@@ -1,6 +1,5 @@
 package com.sowarapp.android.ui.category
 
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -28,10 +27,14 @@ class CategoryViewModel(
         viewModelScope.launch { imageRepository.catalog.collect { catalog = it } }
     }
 
+    // Plain getters, not derivedStateOf: this ViewModel is created during composition, and
+    // derived state made there could crash the app at startup ("Reading a state that was
+    // created after the snapshot was taken"). Compose still tracks the catalog read inside them.
+
     /** False for the split second before the catalog is read. */
-    val isLoaded: Boolean by derivedStateOf { catalog != null }
+    val isLoaded: Boolean get() = catalog != null
 
     /** Null if the id doesn't match any category. */
-    val category: Category? by derivedStateOf { catalog?.getCategory(categoryId) }
-    val images: List<SowarImage> by derivedStateOf { catalog?.getImagesInCategory(categoryId).orEmpty() }
+    val category: Category? get() = catalog?.getCategory(categoryId)
+    val images: List<SowarImage> get() = catalog?.getImagesInCategory(categoryId).orEmpty()
 }

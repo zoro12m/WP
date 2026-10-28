@@ -2,7 +2,6 @@ package com.sowarapp.android.ui.details
 
 import android.net.Uri
 import androidx.annotation.StringRes
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -51,28 +50,32 @@ class ImageDetailsViewModel(
         viewModelScope.launch { imageRepository.catalog.collect { catalog = it } }
     }
 
+    // Plain getters, not derivedStateOf: this ViewModel is created during composition, and
+    // derived state made there could crash the app at startup ("Reading a state that was
+    // created after the snapshot was taken"). Compose still tracks the catalog read inside them.
+
     /** False for the split second before the catalog is read. */
-    val isLoaded: Boolean by derivedStateOf { catalog != null }
+    val isLoaded: Boolean get() = catalog != null
 
     /** Every image of the opened image's category, so the user can swipe to the next one. */
-    val images: List<SowarImage> by derivedStateOf {
-        val current = catalog ?: return@derivedStateOf emptyList()
-        val opened = current.getImage(openedImageId) ?: return@derivedStateOf emptyList()
-        current.getImagesInCategory(opened.categoryId).ifEmpty { listOf(opened) }
-    }
+    val images: List<SowarImage>
+        get() {
+            val current = catalog ?: return emptyList()
+            val opened = current.getImage(openedImageId) ?: return emptyList()
+            return current.getImagesInCategory(opened.categoryId).ifEmpty { listOf(opened) }
+        }
 
     /** Where the opened image is in [images], to start the swiping there. */
-    val initialPage: Int by derivedStateOf { images.indexOfFirst { it.id == openedImageId }.coerceAtLeast(0) }
+    val initialPage: Int get() = images.indexOfFirst { it.id == openedImageId }.coerceAtLeast(0)
 
-    val categoryTitle: String? by derivedStateOf {
-        images.firstOrNull()?.let { catalog?.getCategory(it.categoryId)?.title }
-    }
+    val categoryTitle: String?
+        get() = images.firstOrNull()?.let { catalog?.getCategory(it.categoryId)?.title }
 
     /** The image currently on screen (changes when the user swipes). */
     private var currentImageId by mutableStateOf(openedImageId)
 
     /** Null if the id doesn't match any image. */
-    val image: SowarImage? by derivedStateOf { catalog?.getImage(currentImageId) }
+    val image: SowarImage? get() = catalog?.getImage(currentImageId)
 
     fun onImageShown(imageId: String) {
         currentImageId = imageId
