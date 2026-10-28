@@ -17,12 +17,13 @@ android {
         versionCode = 2
         versionName = "0.2.0"
 
-        // Where the app downloads the list of categories and images.
-        // The same file is also bundled in the APK, so the app works on first launch offline.
+        // Where the app downloads the list of categories and images: the R2 bucket, which the
+        // admin page (admin/) updates. A copy is also bundled in the APK, so the app works on
+        // first launch offline. Change the domain here when the bucket gets its own domain.
         buildConfigField(
             "String",
             "CATALOG_URL",
-            "\"https://raw.githubusercontent.com/zoro12m/WP/main/catalog/catalog.json\"",
+            "\"https://pub-c9090d43d21447cc85a1e0804f15d18b.r2.dev/catalog/catalog.json\"",
         )
     }
 

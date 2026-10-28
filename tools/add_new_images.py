@@ -6,9 +6,12 @@ How to add photos:
      inbox/<category id>/, for example inbox/flowers/my-rose.jpg.
   2. On GitHub: Actions -> Add new images -> Run workflow.
 
+The admin page (admin/) is the easier way; this script is the backup.
+
 For each photo in inbox/, the script makes a WebP full image and a thumbnail (same as
 copy_images_to_r2.py), uploads them next to the other photos, adds an entry at the top of
-its category in catalog/catalog.json, and deletes the original from inbox/.
+its category in the catalog, and deletes the original from inbox/. It edits the catalog in R2
+(catalog/catalog.json, the one the app reads) and also writes a copy to the repo.
 New photos are shown as they are, without a caption drawn on top (most already have text).
 
 Category ids: good_morning, good_evening, flowers, wisdom, jumuah, occasions
@@ -28,6 +31,7 @@ from pathlib import Path
 from PIL import Image, UnidentifiedImageError
 
 from copy_images_to_r2 import CATALOG, FULL_WIDTH, THUMB_WIDTH, R2Uploader, to_webp
+from sync_catalog import read_r2_catalog, write_r2_catalog
 
 INBOX = "inbox/"
 PHOTO_TYPES = (".jpg", ".jpeg", ".png", ".webp")
@@ -42,7 +46,7 @@ def main():
 
     base = "https://" + args.domain.strip().removeprefix("https://").removeprefix("http://").strip("/") + "/"
     r2 = R2Uploader(args.bucket)
-    catalog = json.loads(args.catalog.read_text(encoding="utf-8"))
+    catalog = json.loads(read_r2_catalog(r2) or args.catalog.read_text(encoding="utf-8"))
     categories = {category["id"]: category for category in catalog["categories"]}
     known_ids = {item["id"] for item in catalog["items"]}
 
@@ -100,7 +104,10 @@ def main():
 
     # Newest first: new photos go to the top of the list, so they show first in their category.
     catalog["items"] = added + catalog["items"]
-    args.catalog.write_text(json.dumps(catalog, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    text = json.dumps(catalog, ensure_ascii=False, indent=1) + "\n"
+    if added:
+        write_r2_catalog(r2, text)
+    args.catalog.write_text(text, encoding="utf-8")
     print(f"Added {len(added)} new photos")
     for problem in problems:
         print(f"::warning::{problem}")

@@ -1,0 +1,23 @@
+# The admin page for adding photos to SowarApp. See admin/README.md.
+# GitHub deploys it (Actions -> Deploy admin page); you don't need to run wrangler yourself.
+name = "sowarapp-admin"
+main = "src/worker.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+# The page's HTML is bundled into the Worker as plain text.
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = false
+
+# The same bucket the app's photos and catalog live in.
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "sowarapp-images"
+
+[vars]
+# Where the app downloads photos from. Change this when you move to your own domain.
+PUBLIC_BASE_URL = "https://pub-c9090d43d21447cc85a1e0804f15d18b.r2.dev/"
+
+# ADMIN_PASSWORD is a secret, set by the deploy workflow from the GitHub secret of the same name.
