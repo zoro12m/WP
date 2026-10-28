@@ -54,7 +54,7 @@ The app reads [`catalog/catalog.json`](catalog/catalog.json): the list of catego
 Backup way, without the admin page:
 
 1. In Cloudflare: **R2 → sowarapp-images → Upload**. Put each photo in a folder named after its category: `inbox/flowers/`, `inbox/good_morning/`, `inbox/good_evening/`, `inbox/wisdom/`, `inbox/jumuah/` or `inbox/occasions/`.
-2. On GitHub: **Actions → Add new images → Run workflow**.
+2. Wait: GitHub checks the inbox every 3 hours. To add them right away: **Actions → Add new images → Run workflow**.
 
 [`tools/add_new_images.py`](tools/add_new_images.py) resizes each photo, uploads it next to the others, adds it to the catalog in R2 without a caption and empties the inbox. "Build test catalog" and "Copy images to R2" only edit the repo's copy now, so they no longer change what the app shows.
 

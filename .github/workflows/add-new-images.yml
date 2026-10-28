@@ -1,9 +1,12 @@
 # Adds the photos uploaded to inbox/<category>/ in the R2 bucket to the app's catalog.
-# Run it by hand: Actions -> Add new images -> Run workflow. See tools/add_new_images.py.
+# Runs by itself every 3 hours, or by hand: Actions -> Add new images -> Run workflow.
+# See tools/add_new_images.py.
 # Needs the repo secrets R2_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY.
 name: Add new images
 
 on:
+  schedule:
+    - cron: "17 */3 * * *"
   workflow_dispatch:
     inputs:
       domain:
@@ -38,8 +41,9 @@ jobs:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          DOMAIN: ${{ inputs.domain }}
-          BUCKET: ${{ inputs.bucket }}
+          # Scheduled runs have no inputs, so they use the same defaults.
+          DOMAIN: ${{ inputs.domain || 'pub-c9090d43d21447cc85a1e0804f15d18b.r2.dev' }}
+          BUCKET: ${{ inputs.bucket || 'sowarapp-images' }}
         run: python3 tools/add_new_images.py --domain "$DOMAIN" --bucket "$BUCKET"
 
       - name: Commit catalog if it changed
