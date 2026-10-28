@@ -3,12 +3,17 @@
     <string name="app_name">صور اليوم</string>
 
     <!-- Home -->
+    <string name="greeting_morning">صباح الخير ☀️</string>
+    <string name="greeting_evening">مساء الخير 🌙</string>
     <string name="home_subtitle">اختر صورة جميلة وشاركها مع من تحب</string>
     <string name="search_hint">ابحث عن صورة أو قسم</string>
     <string name="search_clear">مسح البحث</string>
     <string name="section_categories">الأقسام</string>
     <string name="section_popular">الأكثر انتشارًا</string>
     <string name="section_search_results">نتائج البحث</string>
+    <string name="section_featured">صورة اليوم</string>
+    <string name="featured_hint">اضغط لتحميلها أو مشاركتها</string>
+    <string name="section_more">اكتشف المزيد</string>
     <string name="category_image_count">عدد الصور: %1$d</string>
     <string name="search_empty_title">لا توجد نتائج</string>
     <string name="catalog_empty_title">تعذّر تحميل الصور</string>
@@ -27,6 +32,7 @@
 
     <!-- Image details -->
     <string name="details_title">تفاصيل الصورة</string>
+    <string name="page_counter">%1$d من %2$d</string>
     <string name="action_download">تحميل</string>
     <string name="action_share">مشاركة</string>
     <string name="action_favorite">المفضلة</string>

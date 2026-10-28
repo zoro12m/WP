@@ -6,6 +6,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -23,7 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -41,7 +42,8 @@ class ImageDetailsViewModel(
     private val imageExporter: ImageExporter,
 ) : ViewModel() {
 
-    private val imageId: String = checkNotNull(savedStateHandle[Routes.ARG_IMAGE_ID])
+    /** The image that was tapped to open this screen. */
+    private val openedImageId: String = checkNotNull(savedStateHandle[Routes.ARG_IMAGE_ID])
 
     private var catalog by mutableStateOf<Catalog?>(null)
 
@@ -52,12 +54,33 @@ class ImageDetailsViewModel(
     /** False for the split second before the catalog is read. */
     val isLoaded: Boolean by derivedStateOf { catalog != null }
 
-    /** Null if the id doesn't match any image. */
-    val image: SowarImage? by derivedStateOf { catalog?.getImage(imageId) }
+    /** Every image of the opened image's category, so the user can swipe to the next one. */
+    val images: List<SowarImage> by derivedStateOf {
+        val current = catalog ?: return@derivedStateOf emptyList()
+        val opened = current.getImage(openedImageId) ?: return@derivedStateOf emptyList()
+        current.getImagesInCategory(opened.categoryId).ifEmpty { listOf(opened) }
+    }
 
-    val isFavorite: StateFlow<Boolean> = favoritesRepository.favoriteIds
-        .map { ids -> imageId in ids }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initialValue = false)
+    /** Where the opened image is in [images], to start the swiping there. */
+    val initialPage: Int by derivedStateOf { images.indexOfFirst { it.id == openedImageId }.coerceAtLeast(0) }
+
+    val categoryTitle: String? by derivedStateOf {
+        images.firstOrNull()?.let { catalog?.getCategory(it.categoryId)?.title }
+    }
+
+    /** The image currently on screen (changes when the user swipes). */
+    private var currentImageId by mutableStateOf(openedImageId)
+
+    /** Null if the id doesn't match any image. */
+    val image: SowarImage? by derivedStateOf { catalog?.getImage(currentImageId) }
+
+    fun onImageShown(imageId: String) {
+        currentImageId = imageId
+    }
+
+    val isFavorite: StateFlow<Boolean> = combine(favoritesRepository.favoriteIds, snapshotFlow { currentImageId }) { ids, id ->
+        id in ids
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initialValue = false)
 
     private val _isBusy = MutableStateFlow(false)
     /** True while a download or share is being prepared, to disable the buttons. */
@@ -68,7 +91,7 @@ class ImageDetailsViewModel(
 
     fun toggleFavorite() {
         viewModelScope.launch {
-            val nowFavorite = favoritesRepository.toggleFavorite(imageId)
+            val nowFavorite = favoritesRepository.toggleFavorite(currentImageId)
             val message = if (nowFavorite) R.string.message_added_favorite else R.string.message_removed_favorite
             _events.send(DetailsEvent.ShowMessage(message))
         }

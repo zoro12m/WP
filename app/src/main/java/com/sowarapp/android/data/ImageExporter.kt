@@ -5,7 +5,9 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.media.MediaScannerConnection
 import android.net.Uri
@@ -17,12 +19,14 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
+import androidx.core.content.res.ResourcesCompat
 import coil3.ImageLoader
 import coil3.request.ErrorResult
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.toBitmap
+import com.sowarapp.android.R
 import com.sowarapp.android.data.model.SowarImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -96,24 +100,42 @@ class ImageExporter(
     private fun drawCaption(bitmap: Bitmap, caption: String) {
         val canvas = Canvas(bitmap)
 
+        val textSize = bitmap.width * CAPTION_SIZE_RATIO
         val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
-            // Same proportions as CaptionedImage in the UI, so the file looks like the screen.
-            textSize = bitmap.width * CAPTION_SIZE_RATIO
-            typeface = Typeface.DEFAULT_BOLD
-            setShadowLayer(bitmap.width * 0.015f, 0f, bitmap.width * 0.005f, Color.argb(160, 0, 0, 0))
+            // Same proportions and font as CaptionedImage in the UI, so the file looks like the screen.
+            this.textSize = textSize
+            typeface = ResourcesCompat.getFont(context, R.font.cairo_bold) ?: Typeface.DEFAULT_BOLD
+            setShadowLayer(bitmap.width * 0.015f, 0f, bitmap.width * 0.005f, Color.argb(180, 0, 0, 0))
         }
         val textWidth = (bitmap.width * CAPTION_WIDTH_RATIO).toInt()
         val layout = StaticLayout.Builder
             .obtain(caption, 0, caption.length, textPaint, textWidth)
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
+            // Line height = 1.3 x text size, like CaptionedImage (Cairo's own line height is much taller).
+            .setLineSpacing(textSize * CAPTION_LINE_HEIGHT - textPaint.fontSpacing, 1f)
             .build()
 
+        val textTop = bitmap.height * CAPTION_VERTICAL_POSITION - layout.height / 2f
+        val textBottom = textTop + layout.height
+
+        // A soft dark band behind the words keeps them readable on bright photos.
+        val bandPadding = textSize * CAPTION_BAND_PADDING
+        val bandTop = textTop - bandPadding
+        val bandBottom = textBottom + bandPadding
+        val bandAlpha = (CAPTION_BAND_ALPHA * 255).toInt()
+        val bandPaint = Paint().apply {
+            shader = LinearGradient(
+                0f, bandTop, 0f, bandBottom,
+                intArrayOf(Color.TRANSPARENT, Color.argb(bandAlpha, 0, 0, 0), Color.TRANSPARENT),
+                floatArrayOf(0f, 0.5f, 1f),
+                Shader.TileMode.CLAMP,
+            )
+        }
+        canvas.drawRect(0f, bandTop, bitmap.width.toFloat(), bandBottom, bandPaint)
+
         canvas.save()
-        canvas.translate(
-            (bitmap.width - textWidth) / 2f,
-            bitmap.height * CAPTION_VERTICAL_POSITION - layout.height / 2f,
-        )
+        canvas.translate((bitmap.width - textWidth) / 2f, textTop)
         layout.draw(canvas)
         canvas.restore()
     }
@@ -166,6 +188,13 @@ class ImageExporter(
         const val CAPTION_SIZE_RATIO = 0.085f
         const val CAPTION_WIDTH_RATIO = 0.84f
         const val CAPTION_VERTICAL_POSITION = 0.6f
+        const val CAPTION_LINE_HEIGHT = 1.3f
+
+        /** Space above and below the text inside the dark band, as a multiple of the text size. */
+        const val CAPTION_BAND_PADDING = 0.9f
+
+        /** Darkness of the middle of the band (0 = invisible, 1 = black). */
+        const val CAPTION_BAND_ALPHA = 0.45f
 
         private const val ALBUM_NAME = "SowarApp"
         private const val SHARE_FOLDER = "shared_images"

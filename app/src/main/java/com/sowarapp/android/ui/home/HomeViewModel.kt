@@ -11,6 +11,7 @@ import com.sowarapp.android.data.model.Catalog
 import com.sowarapp.android.data.model.Category
 import com.sowarapp.android.data.model.SowarImage
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 class HomeViewModel(imageRepository: ImageRepository) : ViewModel() {
 
@@ -26,6 +27,20 @@ class HomeViewModel(imageRepository: ImageRepository) : ViewModel() {
 
     val categories: List<Category> by derivedStateOf { catalog?.categories.orEmpty() }
     val popularImages: List<SowarImage> by derivedStateOf { catalog?.getPopularImages().orEmpty() }
+
+    /** "Picture of the day": a popular image that changes every day. */
+    val featuredImage: SowarImage? by derivedStateOf {
+        val candidates = popularImages.ifEmpty { catalog?.items.orEmpty() }
+        if (candidates.isEmpty()) return@derivedStateOf null
+        val dayOfYear = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
+        candidates[dayOfYear % candidates.size]
+    }
+
+    /** Everything else, for the "discover more" grid under the popular images. */
+    val moreImages: List<SowarImage> by derivedStateOf {
+        val shown = popularImages.map { it.id }.toSet() + listOfNotNull(featuredImage?.id)
+        catalog?.items.orEmpty().filter { it.id !in shown }
+    }
 
     /** Image count per category id, shown on each category card. */
     val imageCounts: Map<String, Int> by derivedStateOf {
