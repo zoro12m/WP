@@ -47,7 +47,9 @@ The app reads [`catalog/catalog.json`](catalog/catalog.json): the list of catego
 - `type` is `image` for now. Entries with other types (for example a future `video`) are skipped by this version, so adding them later won't break installed apps.
 - Unknown extra fields are ignored, so the format can grow.
 
-**At 10,000 images,** GitHub and Wikimedia links won't be enough: we'll move the photos to real image hosting with a CDN (for example Firebase Storage or Cloudflare R2), and split the catalog into pages or serve it from a small API.
+**Image hosting: Cloudflare R2.** The photos are served from an R2 bucket on our own domain (downloads from R2 are free). [`tools/copy_images_to_r2.py`](tools/copy_images_to_r2.py) downloads each photo in the catalog, makes a WebP full image (1280 px wide at most) and a 500 px thumbnail, uploads both to `images/<category>/<id>.webp` and `thumbs/<category>/<id>.webp`, and rewrites the links in the catalog. Photos already on the domain are skipped. Run it with **Actions → Copy images to R2 → Run workflow**, giving the image domain. It needs the repo secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`. "Build test catalog" puts Wikimedia links back, so run the copy again after it.
+
+At 10,000 images the single catalog file gets too big, so a later step will split it into pages.
 
 ## Tech stack
 
