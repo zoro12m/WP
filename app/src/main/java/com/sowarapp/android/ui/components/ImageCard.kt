@@ -12,23 +12,34 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.sowarapp.android.data.model.SowarImage
 
-/** A tappable thumbnail used in grids and rows. Images are portrait (3:4). */
+/**
+ * A tappable photo card. In grids it keeps roughly the photo's own shape
+ * (very tall or very wide photos are limited), which gives the Pinterest-style layout.
+ */
 @Composable
 fun ImageCard(
     image: SowarImage,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    aspectRatio: Float = image.aspectRatio.coerceIn(MIN_CARD_RATIO, MAX_CARD_RATIO),
 ) {
     Card(
         onClick = onClick,
         shape = MaterialTheme.shapes.large,
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
         modifier = modifier
-            .aspectRatio(IMAGE_ASPECT_RATIO)
+            .aspectRatio(aspectRatio)
             .semantics { contentDescription = image.description },
     ) {
-        CaptionedImage(image = image, useThumbnail = true, modifier = Modifier.fillMaxSize())
+        CaptionedImage(
+            image = image,
+            useThumbnail = true,
+            captionStyle = CaptionStyle.Footer,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 
-const val IMAGE_ASPECT_RATIO = 3f / 4f
+private const val MIN_CARD_RATIO = 0.7f
+private const val MAX_CARD_RATIO = 1.4f

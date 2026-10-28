@@ -1,5 +1,10 @@
 package com.sowarapp.android.ui.navigation
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
@@ -24,6 +29,11 @@ fun SowarNavHost(
         navController = navController,
         startDestination = Routes.HOME,
         modifier = modifier,
+        // Screens gently fade and grow in, and fade and shrink away when going back.
+        enterTransition = { fadeIn(tween(TRANSITION_MILLIS)) + scaleIn(tween(TRANSITION_MILLIS), initialScale = 0.96f) },
+        exitTransition = { fadeOut(tween(TRANSITION_MILLIS)) },
+        popEnterTransition = { fadeIn(tween(TRANSITION_MILLIS)) },
+        popExitTransition = { fadeOut(tween(TRANSITION_MILLIS)) + scaleOut(tween(TRANSITION_MILLIS), targetScale = 0.96f) },
     ) {
         composable(Routes.HOME) {
             HomeScreen(
@@ -48,3 +58,5 @@ fun SowarNavHost(
         }
     }
 }
+
+private const val TRANSITION_MILLIS = 250
