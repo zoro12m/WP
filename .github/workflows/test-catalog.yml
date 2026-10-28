@@ -1,15 +1,15 @@
 # Rebuilds catalog/catalog.json (the test images) on GitHub's machines and commits it.
-# Runs when the builder script changes, or by hand from the Actions tab.
+# By hand only (Actions tab): it replaces the whole catalog, including photos added with
+# "Add new images", so don't run it once the catalog holds real photos.
 name: Build test catalog
 
 on:
-  push:
-    branches: [main, "claude/**"]
-    paths: [tools/build_test_catalog.py]
   workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency: catalog
 
 jobs:
   catalog:
