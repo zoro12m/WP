@@ -1,0 +1,72 @@
+# Copies the catalog's photos to Cloudflare R2 and commits catalog.json with the new links.
+# Run it by hand: Actions -> Copy images to R2 -> Run workflow.
+# Needs the repo secrets R2_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY.
+# "Build test catalog" puts Wikimedia links back, so run this again after that one.
+name: Copy images to R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: "Image domain connected to the bucket (e.g. img.sowarapp.com)"
+        required: true
+      bucket:
+        description: "R2 bucket name"
+        default: sowarapp-images
+
+permissions:
+  contents: write
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # boto3 stays below 1.36, whose new upload checksums R2 did not accept at first.
+      - name: Install tools
+        run: pip install boto3==1.35.36 pillow==11.0.0
+
+      - name: Check the R2 secrets are set
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          for name in R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing repo secret $name (Settings -> Secrets and variables -> Actions)"
+              exit 1
+            fi
+          done
+
+      - name: Copy images
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          DOMAIN: ${{ inputs.domain }}
+          BUCKET: ${{ inputs.bucket }}
+        run: python3 tools/copy_images_to_r2.py --domain "$DOMAIN" --bucket "$BUCKET"
+
+      - name: Check one copied image loads from the domain
+        run: |
+          url=$(python3 -c "import json; print(json.load(open('catalog/catalog.json'))['items'][0]['thumbnailUrl'])")
+          echo "Fetching $url"
+          curl -fsS -o /dev/null -w "HTTP %{http_code}, %{size_download} bytes, %{content_type}\n" "$url"
+
+      - name: Commit catalog if it changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add catalog/catalog.json
+          if git diff --cached --quiet; then
+            echo "Catalog unchanged"
+          else
+            git commit -m "Point catalog images at R2"
+            git push
+          fi
