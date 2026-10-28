@@ -17,6 +17,9 @@ on:
 permissions:
   contents: write
 
+# Only one workflow edits catalog.json at a time.
+concurrency: catalog
+
 jobs:
   copy:
     runs-on: ubuntu-latest

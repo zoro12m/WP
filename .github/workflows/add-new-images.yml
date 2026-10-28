@@ -1,0 +1,55 @@
+# Adds the photos uploaded to inbox/<category>/ in the R2 bucket to the app's catalog.
+# Run it by hand: Actions -> Add new images -> Run workflow. See tools/add_new_images.py.
+# Needs the repo secrets R2_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY.
+name: Add new images
+
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: "Public address of the bucket"
+        default: pub-c9090d43d21447cc85a1e0804f15d18b.r2.dev
+      bucket:
+        description: "R2 bucket name"
+        default: sowarapp-images
+
+permissions:
+  contents: write
+
+# Only one workflow edits catalog.json at a time.
+concurrency: catalog
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # boto3 stays below 1.36, whose new upload checksums R2 did not accept at first.
+      - name: Install tools
+        run: pip install boto3==1.35.36 pillow==11.0.0
+
+      - name: Add photos from the inbox
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          DOMAIN: ${{ inputs.domain }}
+          BUCKET: ${{ inputs.bucket }}
+        run: python3 tools/add_new_images.py --domain "$DOMAIN" --bucket "$BUCKET"
+
+      - name: Commit catalog if it changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add catalog/catalog.json
+          if git diff --cached --quiet; then
+            echo "No new photos"
+          else
+            git commit -m "Add new images"
+            git push
+          fi
