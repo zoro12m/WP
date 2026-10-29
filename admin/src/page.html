@@ -67,6 +67,10 @@
   .tile { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; display: flex; flex-direction: column; }
   .tile img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: block; background: #f3eaea; }
   .tile .body { padding: 8px; display: grid; gap: 6px; }
+  .tile .pic { position: relative; }
+  .tile .badge { position: absolute; inset: auto 6px 6px 6px; padding: 6px 8px; border-radius: 8px; text-align: center;
+    font-weight: 700; color: #fff; background: #2e7d32e6; }
+  .tile .badge.none { background: #c0392be6; }
   .tile textarea { min-height: 54px; resize: vertical; font-size: .9rem; }
   .tile .status { font-size: .85rem; min-height: 1.2em; }
   .tile .actions { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -437,7 +441,7 @@ function renderPending() {
     const tile = document.createElement("div");
     tile.className = "tile";
     tile.innerHTML = `
-      <img alt="">
+      <div class="pic"><img alt=""><div class="badge"></div></div>
       <div class="body">
         <select class="cat"></select>
         <div class="ai"></div>
@@ -450,11 +454,18 @@ function renderPending() {
     const section = tile.querySelector("select.cat");
     section.innerHTML = `<option value="">اختر القسم…</option>` + categoryOptions();
     section.value = entry.categoryId;
-    section.classList.toggle("missing", !entry.categoryId);
+    const badge = tile.querySelector(".badge");
+    const showSection = () => {
+      section.classList.toggle("missing", !entry.categoryId);
+      badge.classList.toggle("none", !entry.categoryId);
+      badge.textContent = entry.categoryId ? `← ${categoryTitle(entry.categoryId)}` : "بلا قسم: اختره";
+    };
+    showSection();
     section.addEventListener("change", () => {
       entry.categoryId = section.value;
       entry.chosenByHand = true;
-      section.classList.toggle("missing", !entry.categoryId);
+      showSection();
+      showPendingSummary();
     });
     tile.querySelector(".ai").textContent = entry.aiNote;
     const caption = tile.querySelector("textarea");
@@ -474,7 +485,19 @@ function renderPending() {
     box.append(tile);
   }
   $("publishBar").classList.toggle("hidden", pending.length === 0);
-  $("publishStatus").textContent = pending.length ? `${pending.length} صورة جاهزة للنشر` : "";
+  showPendingSummary();
+}
+
+/** "4 صور: صباح الخير 2 · ورود 1 · بلا قسم 1", so you see where everything will go before publishing. */
+function showPendingSummary() {
+  if (!pending.length) { $("publishStatus").textContent = ""; return; }
+  const counts = new Map();
+  for (const entry of pending) {
+    const name = entry.categoryId ? categoryTitle(entry.categoryId) : "بلا قسم";
+    counts.set(name, (counts.get(name) || 0) + 1);
+  }
+  $("publishStatus").textContent =
+    `${pending.length} صورة جاهزة: ` + [...counts].map(([name, n]) => `${name} ${n}`).join(" · ");
 }
 
 $("clearBtn").addEventListener("click", () => {
