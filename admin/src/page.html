@@ -70,6 +70,13 @@
   .tile textarea { min-height: 54px; resize: vertical; font-size: .9rem; }
   .tile .status { font-size: .85rem; min-height: 1.2em; }
   .tile .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tile .ai { font-size: .85rem; color: var(--rose-dark); min-height: 1.2em; }
+
+  .catRow { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .catRow input { flex: 1 1 160px; border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; }
+  .catRow .count { color: var(--muted); font-size: .9rem; min-width: 64px; }
+  #addCategoryForm { margin-top: 12px; }
+  #addCategoryForm input { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
 
   #publishBar { position: sticky; bottom: 0; background: var(--card); padding-top: 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
   #moreBtn { margin: 12px auto 0; display: block; }
@@ -95,9 +102,10 @@
     <section>
       <h2>إضافة صور جديدة</h2>
       <div class="toolbar">
-        <label>القسم
+        <label>القسم الافتراضي
           <select id="uploadCategory"></select>
         </label>
+        <label class="row"><input id="autoSort" type="checkbox" checked> 🤖 اختر القسم لكل صورة تلقائيًا</label>
       </div>
       <div id="drop" tabindex="0" role="button">
         اسحب الصور إلى هنا أو اضغط لاختيارها<br>
@@ -110,6 +118,17 @@
         <button id="clearBtn" type="button" class="ghost">إلغاء الكل</button>
         <span id="publishStatus" class="muted"></span>
       </div>
+    </section>
+
+    <section>
+      <h2>الأقسام</h2>
+      <p class="muted">هذه أقسام التطبيق بالترتيب الذي تظهر به. القسم الفارغ لا يظهر في التطبيق حتى تضيف له صورة.</p>
+      <div id="categoryList"></div>
+      <form id="addCategoryForm" class="toolbar">
+        <input id="newCategoryTitle" type="text" maxlength="40" placeholder="اسم القسم الجديد، مثلًا: عيد مبارك" required>
+        <button type="submit">إضافة قسم</button>
+      </form>
+      <div id="categoryStatus" class="muted"></div>
     </section>
 
     <section>
@@ -195,8 +214,14 @@ async function start() {
   renderLibrary();
 }
 
+function categoryOptions() {
+  return catalog.categories.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.title)}</option>`).join("");
+}
+
+const categoryTitle = (id) => catalog.categories.find((c) => c.id === id)?.title || id;
+
 function fillCategorySelects() {
-  const options = catalog.categories.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.title)}</option>`).join("");
+  const options = categoryOptions();
   const upload = $("uploadCategory");
   const keep = upload.value;
   upload.innerHTML = options;
@@ -204,7 +229,81 @@ function fillCategorySelects() {
   const library = $("libraryCategory");
   const keepLibrary = library.value;
   library.innerHTML = `<option value="">كل الأقسام</option>` + options;
-  library.value = keepLibrary;
+  library.value = catalog.categories.some((c) => c.id === keepLibrary) ? keepLibrary : "";
+  // Photos waiting to be published whose section was deleted go back to the default one.
+  for (const entry of pending) {
+    if (!catalog.categories.some((c) => c.id === entry.categoryId)) entry.categoryId = upload.value;
+  }
+  renderCategories();
+}
+
+// ---------- Sections ----------
+
+function renderCategories() {
+  const box = $("categoryList");
+  box.innerHTML = "";
+  catalog.categories.forEach((category, index) => {
+    const count = catalog.items.filter((item) => item.categoryId === category.id).length;
+    const row = document.createElement("div");
+    row.className = "catRow";
+    row.innerHTML = `
+      <input type="text" maxlength="40">
+      <span class="count">${count} صورة</span>
+      <button type="button" class="ghost small up" title="إلى الأعلى">▲</button>
+      <button type="button" class="ghost small down" title="إلى الأسفل">▼</button>
+      <button type="button" class="small save">حفظ الاسم</button>
+      <button type="button" class="small danger delete">حذف</button>`;
+    const title = row.querySelector("input");
+    title.value = category.title;
+    row.querySelector(".up").disabled = index === 0;
+    row.querySelector(".down").disabled = index === catalog.categories.length - 1;
+    const remove = row.querySelector(".delete");
+    if (count) {
+      remove.disabled = true;
+      remove.title = "انقل صور هذا القسم أو احذفها أولًا";
+    }
+    row.querySelector(".up").addEventListener("click", () => changeCategories(`/api/categories/${category.id}/move`, "POST", { direction: -1 }));
+    row.querySelector(".down").addEventListener("click", () => changeCategories(`/api/categories/${category.id}/move`, "POST", { direction: 1 }));
+    row.querySelector(".save").addEventListener("click", () => changeCategories(`/api/categories/${category.id}`, "PATCH", { title: title.value }, "حُفظ الاسم ✓"));
+    remove.addEventListener("click", () => {
+      if (confirm(`حذف قسم «${category.title}»؟`)) changeCategories(`/api/categories/${category.id}`, "DELETE", {}, "حُذف القسم ✓");
+    });
+    box.append(row);
+  });
+}
+
+/** Sends one change to the sections, then reloads the catalog so every list on the page matches. */
+async function changeCategories(path, method, body, doneText = "") {
+  $("categoryStatus").textContent = "جارٍ الحفظ…";
+  try {
+    await sendJson(path, method, body);
+    ({ catalog } = await api("/api/catalog"));
+    fillCategorySelects();
+    renderPending();
+    renderLibrary();
+    $("categoryStatus").innerHTML = doneText ? `<span class="okText">${doneText}</span> يظهر التغيير في التطبيق خلال دقيقة.` : "";
+    return true;
+  } catch (error) {
+    $("categoryStatus").innerHTML = `<span class="error">${escapeHtml(arabicError(error.message))}</span>`;
+    return false;
+  }
+}
+
+$("addCategoryForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const title = $("newCategoryTitle").value;
+  if (await changeCategories("/api/categories", "POST", { title }, `أُضيف قسم «${escapeHtml(title.trim())}» ✓`)) {
+    $("newCategoryTitle").value = "";
+  }
+});
+
+/** The Worker answers in English; these are the messages people may actually see. */
+function arabicError(message) {
+  return {
+    "A section with that name already exists": "يوجد قسم بهذا الاسم",
+    "The name must be 1 to 40 characters": "اكتب اسمًا من 1 إلى 40 حرفًا",
+    "Move or delete this section's photos first": "انقل صور هذا القسم أو احذفها أولًا",
+  }[message] || message;
 }
 
 // ---------- Picking photos ----------
@@ -265,7 +364,11 @@ function addFiles(fileList) {
       continue;
     }
     // [source] is what gets shrunk and uploaded; [file] stays the original, for the photo's id.
-    const entry = { file, source: file, preview: "", caption: "", showCaption: false, done: false };
+    // [categoryId] starts as the default section; the AI suggestion or your own choice replaces it.
+    const entry = {
+      file, source: file, preview: "", caption: "", showCaption: false, done: false,
+      categoryId: $("uploadCategory").value, chosenByHand: false, aiNote: "",
+    };
     if (kind === "heic") {
       entry.status = "جارٍ تحويل صورة HEIC…";
       entry.ready = heicToJpeg(file).then((jpeg) => {
@@ -282,9 +385,48 @@ function addFiles(fileList) {
       entry.ready = Promise.resolve();
     }
     pending.push(entry);
+    if ($("autoSort").checked) entry.ready.then(() => suggestFor(entry));
   }
   renderPending();
 }
+
+// ---------- AI section suggestions ----------
+
+let aiUnavailable = false;
+
+/** Asks the Worker which section a photo belongs in, and puts it there unless you already chose. */
+async function suggestFor(entry) {
+  if (entry.failed || aiUnavailable || !pending.includes(entry)) return;
+  entry.aiNote = "🤖 يختار القسم…";
+  renderPending();
+  try {
+    const small = await shrink(await decode(entry.source), 448, "image/jpeg");
+    const response = await fetch("/api/suggest", {
+      method: "POST", credentials: "same-origin", headers: { "Content-Type": "image/jpeg" }, body: small.blob,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.status === 501) aiUnavailable = true;
+    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    if (data.categoryId && catalog.categories.some((c) => c.id === data.categoryId)) {
+      if (!entry.chosenByHand) entry.categoryId = data.categoryId;
+      entry.aiNote = `🤖 اقتراح: ${categoryTitle(data.categoryId)}`;
+    } else {
+      entry.aiNote = "🤖 لم يعرف القسم، اختره بنفسك";
+    }
+  } catch (error) {
+    entry.aiNote = aiUnavailable ? "الاختيار التلقائي غير متاح الآن" : "🤖 تعذّر الاقتراح، اختر القسم بنفسك";
+    console.warn("Suggestion failed", error);
+  }
+  renderPending();
+}
+
+// Changing the default section moves the photos that have no suggestion and weren't chosen by hand.
+$("uploadCategory").addEventListener("change", () => {
+  for (const entry of pending) {
+    if (!entry.chosenByHand && !entry.aiNote.startsWith("🤖 اقتراح")) entry.categoryId = $("uploadCategory").value;
+  }
+  renderPending();
+});
 
 function renderPending() {
   const box = $("pending");
@@ -295,19 +437,26 @@ function renderPending() {
     tile.innerHTML = `
       <img alt="">
       <div class="body">
+        <select class="cat"></select>
+        <div class="ai"></div>
         <textarea placeholder="نص اختياري (يُستعمل في البحث)"></textarea>
         <label class="row"><input type="checkbox"> اكتب النص فوق الصورة</label>
         <div class="actions"><button type="button" class="ghost small">إزالة</button></div>
         <div class="status"></div>
       </div>`;
     if (entry.preview) tile.querySelector("img").src = entry.preview;
+    const section = tile.querySelector("select.cat");
+    section.innerHTML = categoryOptions();
+    section.value = entry.categoryId;
+    section.addEventListener("change", () => { entry.categoryId = section.value; entry.chosenByHand = true; });
+    tile.querySelector(".ai").textContent = entry.aiNote;
     const caption = tile.querySelector("textarea");
     const show = tile.querySelector("input[type=checkbox]");
     caption.value = entry.caption;
     show.checked = entry.showCaption;
     caption.addEventListener("input", () => { entry.caption = caption.value; });
     show.addEventListener("change", () => { entry.showCaption = show.checked; });
-    tile.querySelector("button").addEventListener("click", () => {
+    tile.querySelector(".actions button").addEventListener("click", () => {
       URL.revokeObjectURL(entry.preview);
       pending = pending.filter((other) => other !== entry);
       renderPending();
@@ -353,7 +502,7 @@ async function decode(file) {
 }
 
 /** Returns { blob, ext, width, height }; never makes the photo bigger than it is. */
-async function shrink(source, maxWidth) {
+async function shrink(source, maxWidth, type = "image/webp") {
   const sourceWidth = source.naturalWidth || source.width;
   const sourceHeight = source.naturalHeight || source.height;
   const scale = Math.min(1, maxWidth / sourceWidth);
@@ -367,13 +516,10 @@ async function shrink(source, maxWidth) {
   context.fillStyle = "#fff";   // transparent PNGs get a white background, like the Python tools
   context.fillRect(0, 0, width, height);
   context.drawImage(source, 0, 0, width, height);
-  let blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/webp", QUALITY));
+  let blob = await new Promise((resolve) => canvas.toBlob(resolve, type, QUALITY));
   // Some browsers (older Safari) cannot make WebP; JPEG works everywhere.
-  if (!blob || blob.type !== "image/webp") {
-    blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
-    return { blob, ext: "jpg", width, height };
-  }
-  return { blob, ext: "webp", width, height };
+  if (!blob || blob.type !== type) blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+  return { blob, ext: blob.type === "image/webp" ? "webp" : "jpg", width, height };
 }
 
 async function upload(key, blob) {
@@ -381,11 +527,12 @@ async function upload(key, blob) {
 }
 
 $("publishBtn").addEventListener("click", async () => {
-  const categoryId = $("uploadCategory").value;
-  const categoryTitle = catalog.categories.find((c) => c.id === categoryId)?.title || categoryId;
   const toPublish = pending.filter((entry) => !entry.done);
   if (!toPublish.length) return;
-  if (!confirm(`نشر ${toPublish.length} صورة في قسم «${categoryTitle}»؟`)) return;
+  const perSection = new Map();
+  for (const entry of toPublish) perSection.set(entry.categoryId, (perSection.get(entry.categoryId) || 0) + 1);
+  const summary = [...perSection].map(([id, n]) => `«${categoryTitle(id)}»: ${n}`).join("\n");
+  if (!confirm(`نشر ${toPublish.length} صورة؟\n${summary}`)) return;
 
   $("publishBtn").disabled = true;
   $("clearBtn").disabled = true;
@@ -398,6 +545,7 @@ $("publishBtn").addEventListener("click", async () => {
       await entry.ready;
       if (entry.failed) throw new Error(entry.status);
       entry.statusEl.textContent = "جارٍ التصغير…";
+      const categoryId = entry.categoryId;
       const id = await photoId(entry.file, categoryId);
       const source = await decode(entry.source);
       const full = await shrink(source, FULL_WIDTH);
@@ -462,6 +610,7 @@ function renderLibrary() {
   box.innerHTML = "";
   for (const item of items.slice(0, libraryShown)) box.append(libraryTile(item));
   $("moreBtn").classList.toggle("hidden", items.length <= libraryShown);
+  renderCategories();   // keeps the photo counts next to each section up to date
 }
 
 function libraryTile(item) {

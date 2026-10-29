@@ -21,6 +21,18 @@ first frame is kept) and BMP. Browsers can't open HEIC, so the page first turns 
 [heic2any](https://github.com/alexcorvi/heic2any) (MIT), which the Worker serves at `/vendor/heic2any.js`.
 Whatever goes in, the app always gets WebP (or JPEG on browsers that can't make WebP).
 
+**Sections.** The *الأقسام* box adds, renames, reorders and deletes the app's sections (categories).
+A new section gets an id like `c_1a2b3c4d` (used in photo paths) and stays hidden in the app until it
+has a photo. A section can only be deleted once it is empty, so no photo is ever lost by accident.
+
+**Automatic sorting.** With *اختر القسم لكل صورة تلقائيًا* ticked, each new photo is shown to a
+vision AI model (Cloudflare Workers AI, `@cf/meta/llama-3.2-11b-vision-instruct`, through the `AI`
+binding in `wrangler.toml`), which picks a section from the list. It is a suggestion: the photo's
+section menu shows it and you can change it before publishing. The free plan allows 10,000 AI
+"neurons" a day, enough for a few hundred photos; after that, suggestions stop until the next day
+and you pick sections by hand. The first suggestion also accepts Meta's license for the model
+(Cloudflare requires sending "agree" once).
+
 A photo's id comes from its bytes, so publishing the same photo twice adds it once.
 If two changes reach the catalog at the same moment, R2 refuses the second write and the Worker
 retries it on the newest version, so nothing gets lost.

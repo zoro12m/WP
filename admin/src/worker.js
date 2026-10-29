@@ -20,6 +20,9 @@ const SESSION_DAYS = 30;
 // Photos live at images/<category>/<id>.<ext> and thumbs/<category>/<id>.<ext>.
 const PHOTO_PATH = /^(images|thumbs)\/([a-z0-9_]+)\/([a-z0-9_]+)\.(webp|jpg)$/;
 const ID_PATTERN = /^[a-z0-9_]+$/;
+// Looks at a photo and picks its category (Cloudflare Workers AI, free daily allowance).
+const VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct";
+const MAX_SUGGEST_BYTES = 1024 * 1024;
 
 export default {
   async fetch(request, env) {
@@ -70,6 +73,13 @@ async function route(request, env) {
   }
   if (path.startsWith("/api/files/") && method === "PUT") return putPhoto(request, env, path.slice("/api/files/".length));
   if (path === "/api/items" && method === "POST") return addItems(request, env);
+
+  if (path === "/api/suggest" && method === "POST") return suggestCategory(request, env);
+  if (path === "/api/categories" && method === "POST") return addCategory(request, env);
+  const categoryMatch = path.match(/^\/api\/categories\/([a-z0-9_]+)(\/move)?$/);
+  if (categoryMatch && categoryMatch[2] && method === "POST") return moveCategory(request, env, categoryMatch[1]);
+  if (categoryMatch && !categoryMatch[2] && method === "PATCH") return renameCategory(request, env, categoryMatch[1]);
+  if (categoryMatch && !categoryMatch[2] && method === "DELETE") return deleteCategory(env, categoryMatch[1]);
 
   const itemMatch = path.match(/^\/api\/items\/([a-z0-9_]+)$/);
   if (itemMatch && method === "PATCH") return editItem(request, env, itemMatch[1]);
@@ -197,6 +207,8 @@ async function addItems(request, env) {
     }
     // Newest first, so new photos show at the top of their category.
     catalog.items = [...added, ...catalog.items];
+    // A new section gets its first photo as its cover.
+    fixCovers(catalog);
     return { added: added.map((item) => item.id), skipped };
   });
 }
@@ -241,14 +253,126 @@ async function deleteItem(env, id) {
   return result;
 }
 
-/** A category whose cover photo is gone (or no longer in it) gets its newest photo as the new cover. */
+/**
+ * A category whose cover photo is gone (or no longer in it) gets its newest photo as the new cover.
+ * An empty category gets no cover; the app hides categories without photos.
+ */
 function fixCovers(catalog) {
   for (const category of catalog.categories) {
     const inCategory = catalog.items.filter((item) => item.categoryId === category.id);
-    if (inCategory.length && !inCategory.some((item) => item.thumbnailUrl === category.coverUrl)) {
+    if (!inCategory.length) {
+      category.coverUrl = "";
+    } else if (!inCategory.some((item) => item.thumbnailUrl === category.coverUrl)) {
       category.coverUrl = inCategory[0].thumbnailUrl;
     }
   }
+}
+
+// ---------- Categories (the sections of the app) ----------
+
+async function addCategory(request, env) {
+  const title = cleanTitle((await readJson(request)).title);
+  return updateCatalog(env, async (catalog) => {
+    if (catalog.categories.some((category) => category.title === title)) throw new HttpError(400, "A section with that name already exists");
+    // Ids appear in photo paths, so they stay plain letters and digits; the Arabic title is what people see.
+    let id;
+    do id = `c_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
+    while (catalog.categories.some((category) => category.id === id));
+    const category = { id, title, coverUrl: "" };
+    catalog.categories.push(category);
+    return { category };
+  });
+}
+
+async function renameCategory(request, env, id) {
+  const title = cleanTitle((await readJson(request)).title);
+  return updateCatalog(env, async (catalog) => {
+    const category = findCategory(catalog, id);
+    if (catalog.categories.some((other) => other !== category && other.title === title)) throw new HttpError(400, "A section with that name already exists");
+    // Photos carry their category's name as a search word; keep that in step.
+    for (const item of catalog.items) {
+      if (item.categoryId === id) item.tags = (item.tags || []).map((tag) => (tag === category.title ? title : tag));
+    }
+    category.title = title;
+    return { category };
+  });
+}
+
+async function moveCategory(request, env, id) {
+  const { direction } = await readJson(request);
+  if (direction !== -1 && direction !== 1) throw new HttpError(400, "direction must be -1 or 1");
+  return updateCatalog(env, async (catalog) => {
+    const from = catalog.categories.indexOf(findCategory(catalog, id));
+    const to = from + direction;
+    if (to >= 0 && to < catalog.categories.length) {
+      [catalog.categories[from], catalog.categories[to]] = [catalog.categories[to], catalog.categories[from]];
+    }
+    return { order: catalog.categories.map((category) => category.id) };
+  });
+}
+
+async function deleteCategory(env, id) {
+  return updateCatalog(env, async (catalog) => {
+    findCategory(catalog, id);
+    // Never delete photos by accident: the section must be emptied (moved or deleted) first.
+    if (catalog.items.some((item) => item.categoryId === id)) throw new HttpError(400, "Move or delete this section's photos first");
+    catalog.categories = catalog.categories.filter((category) => category.id !== id);
+    return { deleted: id };
+  });
+}
+
+function findCategory(catalog, id) {
+  const category = catalog.categories.find((entry) => entry.id === id);
+  if (!category) throw new HttpError(404, "No section with that id");
+  return category;
+}
+
+function cleanTitle(value) {
+  const title = typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+  if (!title || title.length > 40) throw new HttpError(400, "The name must be 1 to 40 characters");
+  return title;
+}
+
+// ---------- Suggesting a category with AI ----------
+
+/**
+ * The page sends a small JPEG of the photo; a vision model looks at it (and any text on it) and
+ * picks one of the sections. It is only a suggestion: the page shows it and you can change it.
+ */
+async function suggestCategory(request, env) {
+  if (!env.AI) throw new HttpError(501, "AI is not set up for this Worker");
+  if (request.headers.get("Content-Type") !== "image/jpeg") throw new HttpError(400, "Send a JPEG");
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (!bytes.length || bytes.length > MAX_SUGGEST_BYTES) throw new HttpError(413, "Send a small JPEG (under 1 MB)");
+  if (!looksLikePhoto(bytes, "jpg")) throw new HttpError(400, "That is not a JPEG");
+
+  const { catalog } = await readCatalog(env);
+  const list = catalog.categories.map((category) => `${category.id}: ${category.title}`).join("\n");
+  const prompt =
+    "You sort pictures for an Arabic greeting-image app. The sections are (id: Arabic name):\n" +
+    `${list}\n\n` +
+    "Look at the picture and read any Arabic or English text written on it. " +
+    "Reply with only the id of the one section it fits best, nothing else.";
+  const input = { image: Array.from(bytes), prompt, max_tokens: 20, temperature: 0 };
+
+  let result;
+  try {
+    result = await env.AI.run(VISION_MODEL, input);
+  } catch (error) {
+    // Meta's license must be accepted once per account by sending "agree".
+    if (!/agree/i.test(String(error?.message))) throw error;
+    await env.AI.run(VISION_MODEL, { prompt: "agree" });
+    result = await env.AI.run(VISION_MODEL, input);
+  }
+  const answer = String(result?.response ?? "");
+  return json({ categoryId: pickCategory(answer, catalog.categories)?.id ?? null, answer: answer.slice(0, 100) });
+}
+
+/** The category whose id (or Arabic name) appears in the model's answer; the longest match wins. */
+function pickCategory(answer, categories) {
+  const text = answer.toLowerCase();
+  const found = categories.filter((category) => text.includes(category.id) || answer.includes(category.title));
+  return found.sort((a, b) => b.id.length - a.id.length)[0];
 }
 
 function cleanCaption(value) {

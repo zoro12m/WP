@@ -16,6 +16,10 @@ fallthrough = false
 binding = "BUCKET"
 bucket_name = "sowarapp-images"
 
+# Workers AI, used to suggest a category for each new photo (free daily allowance).
+[ai]
+binding = "AI"
+
 [vars]
 # Where the app downloads photos from. Change this when you move to your own domain.
 PUBLIC_BASE_URL = "https://pub-c9090d43d21447cc85a1e0804f15d18b.r2.dev/"
