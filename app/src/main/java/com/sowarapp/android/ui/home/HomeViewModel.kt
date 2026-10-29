@@ -36,7 +36,12 @@ class HomeViewModel(private val imageRepository: ImageRepository) : ViewModel() 
     /** False for the split second before the catalog is read. */
     val isLoaded: Boolean get() = catalog != null
 
-    val categories: List<Category> get() = catalog?.categories.orEmpty()
+    /** Sections that have photos. New sections made on the admin page stay hidden until they get one. */
+    val categories: List<Category>
+        get() {
+            val current = catalog ?: return emptyList()
+            return current.categories.filter { current.getImagesInCategory(it.id).isNotEmpty() }
+        }
     val popularImages: List<SowarImage> get() = catalog?.getPopularImages().orEmpty()
 
     /** "Picture of the day": a popular image that changes every day. */
