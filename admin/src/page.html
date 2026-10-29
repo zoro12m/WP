@@ -78,6 +78,7 @@
   #addCategoryForm { margin-top: 12px; }
   #addCategoryForm input { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
 
+  select.missing { border-color: #c0392b; box-shadow: 0 0 0 2px #c0392b33; }
   #publishBar { position: sticky; bottom: 0; background: var(--card); padding-top: 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
   #moreBtn { margin: 12px auto 0; display: block; }
 </style>
@@ -102,7 +103,7 @@
     <section>
       <h2>إضافة صور جديدة</h2>
       <div class="toolbar">
-        <label>القسم الافتراضي
+        <label>قسم لكل الصور (اختياري)
           <select id="uploadCategory"></select>
         </label>
         <label class="row"><input id="autoSort" type="checkbox" checked> 🤖 اختر القسم لكل صورة تلقائيًا</label>
@@ -224,13 +225,13 @@ function fillCategorySelects() {
   const options = categoryOptions();
   const upload = $("uploadCategory");
   const keep = upload.value;
-  upload.innerHTML = options;
-  if (keep) upload.value = keep;
+  upload.innerHTML = `<option value="">— لا، كل صورة في قسمها —</option>` + options;
+  upload.value = catalog.categories.some((c) => c.id === keep) ? keep : "";
   const library = $("libraryCategory");
   const keepLibrary = library.value;
   library.innerHTML = `<option value="">كل الأقسام</option>` + options;
   library.value = catalog.categories.some((c) => c.id === keepLibrary) ? keepLibrary : "";
-  // Photos waiting to be published whose section was deleted go back to the default one.
+  // Photos waiting to be published whose section was deleted go back to the shared choice (or none).
   for (const entry of pending) {
     if (!catalog.categories.some((c) => c.id === entry.categoryId)) entry.categoryId = upload.value;
   }
@@ -364,7 +365,7 @@ function addFiles(fileList) {
       continue;
     }
     // [source] is what gets shrunk and uploaded; [file] stays the original, for the photo's id.
-    // [categoryId] starts as the default section; the AI suggestion or your own choice replaces it.
+    // [categoryId] starts as the shared section, or empty; the AI suggestion or your own choice fills it.
     const entry = {
       file, source: file, preview: "", caption: "", showCaption: false, done: false,
       categoryId: $("uploadCategory").value, chosenByHand: false, aiNote: "",
@@ -411,16 +412,17 @@ async function suggestFor(entry) {
       if (!entry.chosenByHand) entry.categoryId = data.categoryId;
       entry.aiNote = `🤖 اقتراح: ${categoryTitle(data.categoryId)}`;
     } else {
-      entry.aiNote = "🤖 لم يعرف القسم، اختره بنفسك";
+      entry.aiNote = `🤖 لم يعرف القسم، اختره بنفسك${data.answer ? ` (قال: «${data.answer}»)` : ""}`;
+      if (!data.answer) console.warn("Suggestion had no answer", data);
     }
   } catch (error) {
-    entry.aiNote = aiUnavailable ? "الاختيار التلقائي غير متاح الآن" : "🤖 تعذّر الاقتراح، اختر القسم بنفسك";
+    entry.aiNote = aiUnavailable ? "الاختيار التلقائي غير متاح الآن" : `🤖 تعذّر الاقتراح، اختر القسم بنفسك (${error.message})`;
     console.warn("Suggestion failed", error);
   }
   renderPending();
 }
 
-// Changing the default section moves the photos that have no suggestion and weren't chosen by hand.
+// Choosing a shared section moves the photos that have no suggestion and weren't chosen by hand.
 $("uploadCategory").addEventListener("change", () => {
   for (const entry of pending) {
     if (!entry.chosenByHand && !entry.aiNote.startsWith("🤖 اقتراح")) entry.categoryId = $("uploadCategory").value;
@@ -446,9 +448,14 @@ function renderPending() {
       </div>`;
     if (entry.preview) tile.querySelector("img").src = entry.preview;
     const section = tile.querySelector("select.cat");
-    section.innerHTML = categoryOptions();
+    section.innerHTML = `<option value="">اختر القسم…</option>` + categoryOptions();
     section.value = entry.categoryId;
-    section.addEventListener("change", () => { entry.categoryId = section.value; entry.chosenByHand = true; });
+    section.classList.toggle("missing", !entry.categoryId);
+    section.addEventListener("change", () => {
+      entry.categoryId = section.value;
+      entry.chosenByHand = true;
+      section.classList.toggle("missing", !entry.categoryId);
+    });
     tile.querySelector(".ai").textContent = entry.aiNote;
     const caption = tile.querySelector("textarea");
     const show = tile.querySelector("input[type=checkbox]");
@@ -529,6 +536,11 @@ async function upload(key, blob) {
 $("publishBtn").addEventListener("click", async () => {
   const toPublish = pending.filter((entry) => !entry.done);
   if (!toPublish.length) return;
+  const missing = toPublish.filter((entry) => !entry.categoryId).length;
+  if (missing) {
+    $("publishStatus").innerHTML = `<span class="error">${missing} صورة بلا قسم. اختر قسمها أولًا (المعلَّمة بالأحمر).</span>`;
+    return;
+  }
   const perSection = new Map();
   for (const entry of toPublish) perSection.set(entry.categoryId, (perSection.get(entry.categoryId) || 0) + 1);
   const summary = [...perSection].map(([id, n]) => `«${categoryTitle(id)}»: ${n}`).join("\n");
@@ -631,7 +643,7 @@ function libraryTile(item) {
     </div>`;
   tile.querySelector("img").src = item.thumbnailUrl;
   const select = tile.querySelector("select");
-  select.innerHTML = $("uploadCategory").innerHTML;
+  select.innerHTML = categoryOptions();
   select.value = item.categoryId;
   const caption = tile.querySelector("textarea");
   caption.value = item.caption || "";
