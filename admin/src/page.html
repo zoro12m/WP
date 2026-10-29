@@ -101,9 +101,9 @@
       </div>
       <div id="drop" tabindex="0" role="button">
         اسحب الصور إلى هنا أو اضغط لاختيارها<br>
-        <span class="muted">JPG أو PNG أو WebP · تُصغَّر تلقائيًا قبل الرفع</span>
+        <span class="muted">JPG · PNG · WebP · HEIC (صور الآيفون وسامسونج) · AVIF · GIF · BMP · تُصغَّر تلقائيًا قبل الرفع</span>
       </div>
-      <input id="fileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden">
+      <input id="fileInput" type="file" accept="image/*,.heic,.heif,.avif" multiple class="hidden">
       <div id="pending" class="grid"></div>
       <div id="publishBar" class="hidden">
         <button id="publishBtn" type="button">نشر الصور</button>
@@ -220,13 +220,67 @@ for (const name of ["dragleave", "drop"]) {
 }
 $("drop").addEventListener("drop", (event) => addFiles(event.dataTransfer.files));
 
+// Photo types the page accepts. HEIC/HEIF (iPhone and many Samsung phones) can't be opened by
+// most browsers, so those are first turned into JPEG by heic2any, served by the Worker.
+const BROWSER_TYPES = { jpg: "jpeg", jpeg: "jpeg", jfif: "jpeg", png: "png", webp: "webp", avif: "avif", gif: "gif", bmp: "bmp" };
+const HEIC_TYPES = ["heic", "heif"];
+
+/** "jpeg", "heic", … or null if the page can't use this file. Looks at the type and the name,
+ *  because phones and Windows often send HEIC photos with no type at all. */
+function photoKind(file) {
+  const fromType = (file.type.match(/^image\/(?:x-)?([a-z]+)/) || [])[1];
+  const fromName = (file.name.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase();
+  for (const kind of [fromType, fromName]) {
+    if (!kind) continue;
+    if (HEIC_TYPES.includes(kind)) return "heic";
+    if (BROWSER_TYPES[kind]) return BROWSER_TYPES[kind];
+  }
+  return null;
+}
+
+let heicLibrary = null;
+function loadHeicLibrary() {
+  heicLibrary ??= new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "/vendor/heic2any.js";
+    script.onload = () => resolve(window.heic2any);
+    script.onerror = () => { heicLibrary = null; reject(new Error("تعذّر تحميل محوّل HEIC، حاول مرة أخرى")); };
+    document.head.append(script);
+  });
+  return heicLibrary;
+}
+
+/** Turns a HEIC photo into a JPEG the browser can open (the first picture, if it holds several). */
+async function heicToJpeg(file) {
+  const heic2any = await loadHeicLibrary();
+  const result = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
+  return Array.isArray(result) ? result[0] : result;
+}
+
 function addFiles(fileList) {
   for (const file of fileList) {
-    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
-      alert(`${file.name}: هذا النوع غير مدعوم (استعمل JPG أو PNG أو WebP)`);
+    const kind = photoKind(file);
+    if (!kind) {
+      alert(`${file.name}: هذا النوع غير مدعوم (استعمل JPG أو PNG أو WebP أو HEIC أو AVIF أو GIF أو BMP)`);
       continue;
     }
-    const entry = { file, preview: URL.createObjectURL(file), caption: "", showCaption: false, done: false };
+    // [source] is what gets shrunk and uploaded; [file] stays the original, for the photo's id.
+    const entry = { file, source: file, preview: "", caption: "", showCaption: false, done: false };
+    if (kind === "heic") {
+      entry.status = "جارٍ تحويل صورة HEIC…";
+      entry.ready = heicToJpeg(file).then((jpeg) => {
+        entry.source = jpeg;
+        entry.preview = URL.createObjectURL(jpeg);
+        entry.status = "";
+      }, (error) => {
+        entry.status = `تعذّر فتح الصورة: ${error.message || error}`;
+        entry.failed = true;
+      }).then(() => renderPending());
+    } else {
+      entry.preview = URL.createObjectURL(file);
+      if (kind === "gif") entry.status = "صورة متحركة؟ ستُحفظ أول لقطة منها فقط";
+      entry.ready = Promise.resolve();
+    }
     pending.push(entry);
   }
   renderPending();
@@ -246,7 +300,7 @@ function renderPending() {
         <div class="actions"><button type="button" class="ghost small">إزالة</button></div>
         <div class="status"></div>
       </div>`;
-    tile.querySelector("img").src = entry.preview;
+    if (entry.preview) tile.querySelector("img").src = entry.preview;
     const caption = tile.querySelector("textarea");
     const show = tile.querySelector("input[type=checkbox]");
     caption.value = entry.caption;
@@ -259,6 +313,7 @@ function renderPending() {
       renderPending();
     });
     entry.statusEl = tile.querySelector(".status");
+    entry.statusEl.textContent = entry.status || "";
     entry.tile = tile;
     box.append(tile);
   }
@@ -288,7 +343,11 @@ async function decode(file) {
   } catch {
     const img = new Image();
     img.src = URL.createObjectURL(file);
-    await img.decode();
+    try {
+      await img.decode();
+    } catch {
+      throw new Error("هذا المتصفح لا يستطيع فتح هذه الصورة، جرّب Chrome أو حوّلها إلى JPG");
+    }
     return img;
   }
 }
@@ -336,9 +395,11 @@ $("publishBtn").addEventListener("click", async () => {
     count++;
     $("publishStatus").textContent = `جارٍ رفع ${count} من ${toPublish.length}…`;
     try {
+      await entry.ready;
+      if (entry.failed) throw new Error(entry.status);
       entry.statusEl.textContent = "جارٍ التصغير…";
       const id = await photoId(entry.file, categoryId);
-      const source = await decode(entry.file);
+      const source = await decode(entry.source);
       const full = await shrink(source, FULL_WIDTH);
       const thumb = await shrink(source, THUMB_WIDTH);
       const file = `images/${categoryId}/${id}.${full.ext}`;

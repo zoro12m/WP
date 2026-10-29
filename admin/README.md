@@ -16,6 +16,11 @@ It runs as a Cloudflare Worker on the free plan, next to the R2 bucket that hold
    of its category in `catalog/catalog.json` **in R2**.
 3. The app downloads that catalog from R2 (`CATALOG_URL` in `app/build.gradle.kts`).
 
+Accepted photos: JPG, PNG, WebP, HEIC/HEIF (iPhone and many Samsung phones), AVIF, GIF (only the
+first frame is kept) and BMP. Browsers can't open HEIC, so the page first turns it into JPEG with
+[heic2any](https://github.com/alexcorvi/heic2any) (MIT), which the Worker serves at `/vendor/heic2any.js`.
+Whatever goes in, the app always gets WebP (or JPEG on browsers that can't make WebP).
+
 A photo's id comes from its bytes, so publishing the same photo twice adds it once.
 If two changes reach the catalog at the same moment, R2 refuses the second write and the Worker
 retries it on the newest version, so nothing gets lost.
