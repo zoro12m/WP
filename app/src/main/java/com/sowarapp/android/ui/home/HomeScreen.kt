@@ -22,12 +22,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -54,6 +56,7 @@ import java.util.Calendar
 
 private val SidePadding = 16.dp
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onCategoryClick: (String) -> Unit,
@@ -63,68 +66,75 @@ fun HomeScreen(
     val focusManager = LocalFocusManager.current
     val openImage: (SowarImage) -> Unit = { image -> onImageClick(image.id) }
 
-    // One scrolling "masonry" grid for the whole page. Headers, the category row and the
-    // featured picture take the full width; photo cards fill 2 columns on phones, more on tablets.
-    LazyVerticalStaggeredGrid(
-        columns = StaggeredGridCells.Adaptive(minSize = 150.dp),
-        contentPadding = PaddingValues(start = SidePadding, end = SidePadding, bottom = 24.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalItemSpacing = 12.dp,
+    // Pull down to get the newest photos (for example right after adding some on the admin page).
+    PullToRefreshBox(
+        isRefreshing = viewModel.isRefreshing,
+        onRefresh = viewModel::refresh,
         modifier = Modifier.fillMaxSize(),
     ) {
-        fullWidthItem {
-            HomeHeader(
-                query = viewModel.searchQuery,
-                onQueryChange = viewModel::onSearchQueryChange,
-                onSearch = { focusManager.clearFocus() },
-                modifier = Modifier.fullBleed(SidePadding),
-            )
-        }
-
-        if (!viewModel.isLoaded) {
-            // The catalog is being read; this takes a split second.
-        } else if (viewModel.categories.isEmpty()) {
+        // One scrolling "masonry" grid for the whole page. Headers, the category row and the
+        // featured picture take the full width; photo cards fill 2 columns on phones, more on tablets.
+        LazyVerticalStaggeredGrid(
+            columns = StaggeredGridCells.Adaptive(minSize = 150.dp),
+            contentPadding = PaddingValues(start = SidePadding, end = SidePadding, bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalItemSpacing = 12.dp,
+            modifier = Modifier.fillMaxSize(),
+        ) {
             fullWidthItem {
-                EmptyState(
-                    icon = Icons.Filled.Search,
-                    title = stringResource(R.string.catalog_empty_title),
-                    message = stringResource(R.string.catalog_empty_message),
-                )
-            }
-        } else if (viewModel.isSearching) {
-            sectionTitle(R.string.section_search_results)
-            if (viewModel.searchResults.isEmpty()) {
-                fullWidthItem {
-                    EmptyState(
-                        icon = Icons.Filled.Search,
-                        title = stringResource(R.string.search_empty_title),
-                        message = stringResource(R.string.search_empty_message),
-                    )
-                }
-            } else {
-                imageItems(viewModel.searchResults, openImage)
-            }
-        } else {
-            sectionTitle(R.string.section_categories)
-            fullWidthItem {
-                CategoriesRow(
-                    categories = viewModel.categories,
-                    imageCounts = viewModel.imageCounts,
-                    onCategoryClick = onCategoryClick,
+                HomeHeader(
+                    query = viewModel.searchQuery,
+                    onQueryChange = viewModel::onSearchQueryChange,
+                    onSearch = { focusManager.clearFocus() },
                     modifier = Modifier.fullBleed(SidePadding),
                 )
             }
-            viewModel.featuredImage?.let { featured ->
-                sectionTitle(R.string.section_featured)
-                fullWidthItem { FeaturedImageCard(image = featured, onClick = { openImage(featured) }) }
-            }
-            if (viewModel.popularImages.isNotEmpty()) {
-                sectionTitle(R.string.section_popular)
-                imageItems(viewModel.popularImages, openImage)
-            }
-            if (viewModel.moreImages.isNotEmpty()) {
-                sectionTitle(R.string.section_more)
-                imageItems(viewModel.moreImages, openImage)
+
+            if (!viewModel.isLoaded) {
+                // The catalog is being read; this takes a split second.
+            } else if (viewModel.categories.isEmpty()) {
+                fullWidthItem {
+                    EmptyState(
+                        icon = Icons.Filled.Search,
+                        title = stringResource(R.string.catalog_empty_title),
+                        message = stringResource(R.string.catalog_empty_message),
+                    )
+                }
+            } else if (viewModel.isSearching) {
+                sectionTitle(R.string.section_search_results)
+                if (viewModel.searchResults.isEmpty()) {
+                    fullWidthItem {
+                        EmptyState(
+                            icon = Icons.Filled.Search,
+                            title = stringResource(R.string.search_empty_title),
+                            message = stringResource(R.string.search_empty_message),
+                        )
+                    }
+                } else {
+                    imageItems(viewModel.searchResults, openImage)
+                }
+            } else {
+                sectionTitle(R.string.section_categories)
+                fullWidthItem {
+                    CategoriesRow(
+                        categories = viewModel.categories,
+                        imageCounts = viewModel.imageCounts,
+                        onCategoryClick = onCategoryClick,
+                        modifier = Modifier.fullBleed(SidePadding),
+                    )
+                }
+                viewModel.featuredImage?.let { featured ->
+                    sectionTitle(R.string.section_featured)
+                    fullWidthItem { FeaturedImageCard(image = featured, onClick = { openImage(featured) }) }
+                }
+                if (viewModel.popularImages.isNotEmpty()) {
+                    sectionTitle(R.string.section_popular)
+                    imageItems(viewModel.popularImages, openImage)
+                }
+                if (viewModel.moreImages.isNotEmpty()) {
+                    sectionTitle(R.string.section_more)
+                    imageItems(viewModel.moreImages, openImage)
+                }
             }
         }
     }

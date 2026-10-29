@@ -37,6 +37,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        // The app comes to the front (opened again, or back from another app):
+        // fetch the newest list of photos, so ones added on the admin page show up.
+        (application as SowarApplication).container.imageRepository.refreshIfStale()
+    }
+
     private companion object {
         const val MAX_SPLASH_MILLIS = 1_500L
     }
