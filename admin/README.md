@@ -28,8 +28,8 @@ The repo keeps a copy of the catalog (bundled in the APK for the first offline l
 1. **Cloudflare API token.** In Cloudflare, go to **My Profile → API Tokens → Create Token**,
    pick the **Edit Cloudflare Workers** template, choose your account under *Account Resources*
    (and *All zones* under *Zone Resources*), then **Continue → Create Token**. Copy the token.
-2. **workers.dev address.** Open **Workers & Pages** in the Cloudflare dashboard once. If it
-   asks you to choose a `workers.dev` subdomain, pick one (for example your name).
+2. **workers.dev address.** Nothing to do: the first deploy asks Cloudflare for a free
+   `sowarapp.workers.dev` name (you can type another name when you run the workflow).
 3. **GitHub secrets.** In the repo: **Settings → Secrets and variables → Actions → New
    repository secret**. Add:
    - `CLOUDFLARE_API_TOKEN`: the token from step 1.

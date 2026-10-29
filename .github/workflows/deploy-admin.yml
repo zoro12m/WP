@@ -6,6 +6,10 @@ name: Deploy admin page
 
 on:
   workflow_dispatch:
+    inputs:
+      subdomain:
+        description: "Your free workers.dev name, used only the first time (the page will be at sowarapp-admin.<name>.workers.dev)"
+        default: sowarapp
   push:
     branches: [main]
     paths: ["admin/**", ".github/workflows/deploy-admin.yml"]
@@ -44,6 +48,27 @@ jobs:
       - name: Install wrangler
         working-directory: admin
         run: npm ci --no-audit --no-fund
+
+      # Cloudflare needs a free <name>.workers.dev address for the account before the first deploy.
+      - name: Get a workers.dev address if the account has none
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          SUBDOMAIN: ${{ inputs.subdomain || 'sowarapp' }}
+        run: |
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain"
+          current=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api" | jq -r '.result.subdomain // empty')
+          if [ -n "$current" ]; then
+            echo "The account already has $current.workers.dev"
+            exit 0
+          fi
+          result=$(curl -s -X PUT -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
+            --data "{\"subdomain\":\"$SUBDOMAIN\"}" "$api")
+          if [ "$(echo "$result" | jq -r '.success')" != "true" ]; then
+            echo "::error::Could not get $SUBDOMAIN.workers.dev (maybe someone has it). Run again with another name. $(echo "$result" | jq -c '.errors')"
+            exit 1
+          fi
+          echo "Registered $SUBDOMAIN.workers.dev"
 
       - name: Deploy the Worker
         working-directory: admin
