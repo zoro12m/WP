@@ -1,0 +1,5 @@
+images loaded: 42
+image failures: 0
+
+problems:
+
