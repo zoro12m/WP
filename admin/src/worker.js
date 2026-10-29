@@ -353,19 +353,61 @@ async function suggestCategory(request, env) {
     `${list}\n\n` +
     "Look at the picture and read any Arabic or English text written on it. " +
     "Reply with only the id of the one section it fits best, nothing else.";
-  const input = { image: Array.from(bytes), prompt, max_tokens: 20, temperature: 0 };
-
-  let result;
-  try {
-    result = await env.AI.run(VISION_MODEL, input);
-  } catch (error) {
-    // Meta's license must be accepted once per account by sending "agree".
-    if (!/agree/i.test(String(error?.message))) throw error;
-    await env.AI.run(VISION_MODEL, { prompt: "agree" });
-    result = await env.AI.run(VISION_MODEL, input);
+  const { answer, format, errors } = await askVisionModel(env, bytes, prompt);
+  if (!answer) {
+    const why = Object.entries(errors).map(([name, error]) => `${name}: ${error}`).join(" | ");
+    throw new HttpError(502, `The AI gave no answer (${why})`.slice(0, 400));
   }
-  const answer = String(result?.response ?? "");
-  return json({ categoryId: pickCategory(answer, catalog.categories)?.id ?? null, answer: answer.slice(0, 100) });
+  const category = pickCategory(answer, catalog.categories);
+  return json({ categoryId: category?.id ?? null, answer: answer.slice(0, 100), format, errors });
+}
+
+/**
+ * Cloudflare's docs show more than one way to pass an image to this model, so this tries each
+ * one in turn and keeps the first that gives an answer. [errors] says why the others failed.
+ */
+async function askVisionModel(env, bytes, prompt) {
+  const dataUri = `data:image/jpeg;base64,${toBase64(bytes)}`;
+  const formats = {
+    // The shape in Cloudflare's Llama Vision tutorial.
+    "messages + image": { messages: [{ role: "user", content: prompt }], image: dataUri },
+    "image_url part": {
+      messages: [{ role: "user", content: [
+        { type: "text", text: prompt },
+        { type: "image_url", image_url: { url: dataUri } },
+      ] }],
+    },
+    "prompt + bytes": { prompt, image: Array.from(bytes) },
+  };
+  const errors = {};
+  let agreed = false;
+  for (const [format, input] of Object.entries(formats)) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const result = await env.AI.run(VISION_MODEL, { ...input, max_tokens: 20, temperature: 0 });
+        const answer = String(result?.response ?? "").trim();
+        if (answer) return { answer, format, errors };
+        errors[format] = "empty answer";
+      } catch (error) {
+        const message = String(error?.message || error);
+        errors[format] = message.slice(0, 200);
+        // Meta's license must be accepted once per account by sending "agree"; then try again.
+        if (!agreed && /agree|licen[cs]e/i.test(message)) {
+          agreed = true;
+          await env.AI.run(VISION_MODEL, { prompt: "agree" }).catch(() => {});
+          continue;
+        }
+      }
+      break;
+    }
+  }
+  return { answer: "", format: null, errors };
+}
+
+function toBase64(bytes) {
+  let text = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) text += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(text);
 }
 
 /** The category whose id (or Arabic name) appears in the model's answer; the longest match wins. */

@@ -33,6 +33,10 @@ section menu shows it and you can change it before publishing. The free plan all
 and you pick sections by hand. The first suggestion also accepts Meta's license for the model
 (Cloudflare requires sending "agree" once).
 
+Photos start with no section unless you pick one under *قسم لكل الصور*. A photo the AI could not
+place is marked in red with what the AI answered (or why it failed), and publishing waits until
+every photo has a section, so nothing lands in the wrong one by default.
+
 A photo's id comes from its bytes, so publishing the same photo twice adds it once.
 If two changes reach the catalog at the same moment, R2 refuses the second write and the Worker
 retries it on the newest version, so nothing gets lost.
