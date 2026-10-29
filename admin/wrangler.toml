@@ -5,10 +5,10 @@ main = "src/worker.js"
 compatibility_date = "2026-09-01"
 workers_dev = true
 
-# The page's HTML is bundled into the Worker as plain text.
+# The page's HTML, and the HEIC converter the page loads, are bundled into the Worker as plain text.
 [[rules]]
 type = "Text"
-globs = ["**/*.html"]
+globs = ["**/*.html", "**/heic2any.min.js"]
 fallthrough = false
 
 # The same bucket the app's photos and catalog live in.

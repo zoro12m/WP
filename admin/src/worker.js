@@ -6,6 +6,8 @@
 // The app downloads that catalog from R2, so new photos show up without an app update.
 
 import PAGE from "./page.html";
+// Turns iPhone/Samsung HEIC photos into JPEG in the browser (MIT license, npm package heic2any).
+import HEIC2ANY from "heic2any/dist/heic2any.min.js";
 
 const CATALOG_KEY = "catalog/catalog.json";
 // The app checks for a new catalog each time it starts; a short cache keeps that fresh.
@@ -45,6 +47,11 @@ async function route(request, env) {
         "X-Frame-Options": "DENY",
         "Referrer-Policy": "no-referrer",
       },
+    });
+  }
+  if (path === "/vendor/heic2any.js" && method === "GET") {
+    return new Response(HEIC2ANY, {
+      headers: { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "public, max-age=604800" },
     });
   }
   if (path === "/api/login" && method === "POST") return login(request, env);
