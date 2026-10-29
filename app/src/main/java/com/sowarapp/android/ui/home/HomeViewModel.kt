@@ -12,14 +12,22 @@ import com.sowarapp.android.data.model.SowarImage
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
-class HomeViewModel(imageRepository: ImageRepository) : ViewModel() {
+class HomeViewModel(private val imageRepository: ImageRepository) : ViewModel() {
 
     /** Null until the catalog is ready; replaced when a newer one is downloaded. */
     private var catalog by mutableStateOf<Catalog?>(null)
 
+    /** True while pull to refresh is downloading the newest photos. */
+    var isRefreshing by mutableStateOf(false)
+        private set
+
     init {
         viewModelScope.launch { imageRepository.catalog.collect { catalog = it } }
+        viewModelScope.launch { imageRepository.isRefreshing.collect { isRefreshing = it } }
     }
+
+    /** Pull down on the home screen: get the newest photos now. */
+    fun refresh() = imageRepository.refresh()
 
     // Plain getters, not derivedStateOf: this ViewModel is created during composition, and
     // derived state made there could crash the app at startup ("Reading a state that was
