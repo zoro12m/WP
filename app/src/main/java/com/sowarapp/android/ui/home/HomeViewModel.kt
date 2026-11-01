@@ -29,17 +29,6 @@ class HomeViewModel(private val imageRepository: ImageRepository) : ViewModel() 
     var lastRefreshFailed by mutableStateOf(false)
         private set
 
-    init {
-        viewModelScope.launch {
-            imageRepository.catalog.collect {
-                catalog = it
-                if (isSearching) search(searchQuery)
-            }
-        }
-        viewModelScope.launch { imageRepository.isRefreshing.collect { isRefreshing = it } }
-        viewModelScope.launch { imageRepository.lastRefreshFailed.collect { lastRefreshFailed = it } }
-    }
-
     /** Pull down on the home screen: get the newest photos now. */
     fun refresh() = imageRepository.refresh()
 
@@ -121,6 +110,19 @@ class HomeViewModel(private val imageRepository: ImageRepository) : ViewModel() 
             searchResults = results
             isSearchPending = false
         }
+    }
+
+    // Last in the class on purpose: viewModelScope starts collecting right away, so every
+    // property above (searchQuery included) must already exist when these blocks run.
+    init {
+        viewModelScope.launch {
+            imageRepository.catalog.collect {
+                catalog = it
+                if (isSearching) search(searchQuery)
+            }
+        }
+        viewModelScope.launch { imageRepository.isRefreshing.collect { isRefreshing = it } }
+        viewModelScope.launch { imageRepository.lastRefreshFailed.collect { lastRefreshFailed = it } }
     }
 
     private companion object {
