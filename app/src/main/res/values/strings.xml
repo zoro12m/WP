@@ -18,6 +18,7 @@
     <string name="search_empty_title">لا توجد نتائج</string>
     <string name="catalog_empty_title">تعذّر تحميل الصور</string>
     <string name="catalog_empty_message">تحقّق من اتصال الإنترنت ثم أعد فتح التطبيق</string>
+    <string name="refresh_failed">الإنترنت ضعيف أو مقطوع، فقد لا تظهر أحدث الصور. اسحب للأسفل لإعادة المحاولة.</string>
     <string name="search_empty_message">جرّب كلمة أخرى مثل: ورد، صباح، جمعة</string>
 
     <!-- Bottom navigation -->

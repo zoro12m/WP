@@ -12,6 +12,7 @@ import com.sowarapp.android.data.ImageRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 
 /**
  * Creates the app's shared objects once. This is "manual dependency injection":
@@ -24,6 +25,10 @@ class AppContainer(context: Context) {
 
     /** One HTTP client for everything. Image hosts like Wikimedia ask apps to identify themselves. */
     private val httpClient = OkHttpClient.Builder()
+        // On a bad connection, give up with an error instead of waiting forever.
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .callTimeout(60, TimeUnit.SECONDS)
         .addInterceptor { chain ->
             chain.proceed(chain.request().newBuilder().header("User-Agent", USER_AGENT).build())
         }

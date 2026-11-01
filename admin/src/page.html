@@ -165,8 +165,21 @@ let libraryShown = PAGE_SIZE;
 
 // ---------- Talking to the Worker ----------
 
+// On a weak connection a request can hang; after this long we stop and say so instead.
+const REQUEST_TIMEOUT_MS = 60_000;
+const SLOW_NETWORK = "الإنترنت بطيء أو مقطوع، حاول مرة أخرى";
+
+/** fetch() that gives up after [ms] with a clear message. */
+async function fetchWithTimeout(path, options, ms = REQUEST_TIMEOUT_MS) {
+  try {
+    return await fetch(path, { credentials: "same-origin", signal: AbortSignal.timeout(ms), ...options });
+  } catch (error) {
+    throw new Error(error.name === "TimeoutError" || error instanceof TypeError ? SLOW_NETWORK : error.message);
+  }
+}
+
 async function api(path, options = {}) {
-  const response = await fetch(path, { credentials: "same-origin", ...options });
+  const response = await fetchWithTimeout(path, options);
   const data = await response.json().catch(() => ({}));
   if (response.status === 401 && path !== "/api/login") {
     showLogin();
@@ -406,9 +419,9 @@ async function suggestFor(entry) {
   renderPending();
   try {
     const small = await shrink(await decode(entry.source), 448, "image/jpeg");
-    const response = await fetch("/api/suggest", {
-      method: "POST", credentials: "same-origin", headers: { "Content-Type": "image/jpeg" }, body: small.blob,
-    });
+    const response = await fetchWithTimeout("/api/suggest", {
+      method: "POST", headers: { "Content-Type": "image/jpeg" }, body: small.blob,
+    }, 90_000);  // the Worker may try a few AI formats, 20 seconds each at most
     const data = await response.json().catch(() => ({}));
     if (response.status === 501) aiUnavailable = true;
     if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);

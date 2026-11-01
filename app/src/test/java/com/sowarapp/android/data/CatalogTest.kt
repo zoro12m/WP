@@ -91,9 +91,8 @@ class CatalogTest {
         assertTrue(real.categories.isNotEmpty())
         val ids = real.items.map { it.id }
         assertEquals("image ids must be unique", ids.size, ids.toSet().size)
-        real.categories.forEach { category ->
-            assertTrue(category.title, real.getImagesInCategory(category.id).isNotEmpty())
-        }
+        // A section made on the admin page may still be empty (the app hides it), but not all of them.
+        assertTrue(real.categories.any { real.getImagesInCategory(it.id).isNotEmpty() })
         real.items.forEach { image ->
             assertTrue(image.id, image.imageUrl.startsWith("https://"))
             assertTrue(image.id, real.getCategory(image.categoryId) != null)

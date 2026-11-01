@@ -2,7 +2,8 @@
 """Drives the debug APK on an emulator like a person would, and takes screenshots.
 
 Used by .github/workflows/emulator-test.yml. Steps:
-home -> a category -> first image -> download -> share -> favorite -> favorites tab.
+home -> a category -> first image -> download -> share -> favorite -> favorites tab,
+then a fresh start on a slow (EDGE, 2G-like) connection.
 It fails if the catalog doesn't show, no photo loads, the app crashes,
 or Download doesn't put a file in the gallery. Screenshots and logs land in emulator-results/.
 """
@@ -74,6 +75,35 @@ def gallery_count():
     return out.count("sowar_")
 
 
+def slow_network_check():
+    """A fresh install on a slow connection must still download the catalog and show photos."""
+    # The emulator console makes the connection slow; if that's unavailable, say so and skip.
+    result = subprocess.run(["adb", "emu", "network", "speed", "edge"], capture_output=True, text=True)
+    output = result.stdout + result.stderr
+    if result.returncode != 0 or "KO" in output or "error" in output.lower():
+        print(f"slow network: could not slow the emulator down ({output.strip()!r}); skipped")
+        return
+    adb("emu", "network", "delay", "edge", check=False)
+    adb("shell", "pm", "clear", PACKAGE)  # no saved catalog, like a new user
+    adb("logcat", "-c")
+    started = time.time()
+    adb("shell", "am", "start", "-n", f"{PACKAGE}/.MainActivity")
+    if find("الأقسام", timeout=60) is None:
+        problems.append("slow network: the home screen never appeared")
+    time.sleep(40)  # catalog + first thumbnails over EDGE
+    screenshot("08_slow_network_home")
+    log = adb("logcat", "-d", "-v", "brief", check=False)
+    (OUT / "logcat_slow_network.txt").write_text(log)
+    if "Could not download the catalog" in log:
+        problems.append("slow network: the catalog download failed (see logcat_slow_network.txt)")
+    if "FATAL EXCEPTION" in log:
+        problems.append("slow network: the app crashed (see logcat_slow_network.txt)")
+    loaded = sum(1 for line in log.splitlines() if "RealImageLoader" in line and "Successful" in line)
+    print(f"slow network: {loaded} images loaded within {time.time() - started:.0f}s")
+    adb("emu", "network", "speed", "full", check=False)
+    adb("emu", "network", "delay", "none", check=False)
+
+
 def main():
     adb("install", "-r", "-g", APK)
     adb("logcat", "-c")
@@ -130,6 +160,7 @@ def main():
 
     log = adb("logcat", "-d", "-v", "brief", check=False)
     (OUT / "logcat.txt").write_text(log)
+    slow_network_check()
     lines = log.splitlines()
     # Coil's DebugLogger (debug builds only) logs each load under the RealImageLoader tag.
     coil_lines = [line for line in lines if "RealImageLoader" in line]

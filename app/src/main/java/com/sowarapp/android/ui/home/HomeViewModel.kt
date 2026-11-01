@@ -9,7 +9,11 @@ import com.sowarapp.android.data.ImageRepository
 import com.sowarapp.android.data.model.Catalog
 import com.sowarapp.android.data.model.Category
 import com.sowarapp.android.data.model.SowarImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 
 class HomeViewModel(private val imageRepository: ImageRepository) : ViewModel() {
@@ -21,10 +25,9 @@ class HomeViewModel(private val imageRepository: ImageRepository) : ViewModel() 
     var isRefreshing by mutableStateOf(false)
         private set
 
-    init {
-        viewModelScope.launch { imageRepository.catalog.collect { catalog = it } }
-        viewModelScope.launch { imageRepository.isRefreshing.collect { isRefreshing = it } }
-    }
+    /** True when the last check for new photos failed; the home screen shows a short note. */
+    var lastRefreshFailed by mutableStateOf(false)
+        private set
 
     /** Pull down on the home screen: get the newest photos now. */
     fun refresh() = imageRepository.refresh()
@@ -67,16 +70,62 @@ class HomeViewModel(private val imageRepository: ImageRepository) : ViewModel() 
             return current.categories.associate { it.id to current.getImagesInCategory(it.id).size }
         }
 
-    /** What the user typed in the search field. */
+    /** What the user typed in the search field. Updated on every key, so typing stays instant. */
     var searchQuery by mutableStateOf("")
         private set
 
-    /** Recalculated automatically whenever [searchQuery] or the catalog changes. */
-    val searchResults: List<SowarImage> get() = catalog?.search(searchQuery).orEmpty()
+    /** Photos matching [searchQuery], worked out [SEARCH_DELAY_MILLIS] after typing pauses. */
+    var searchResults by mutableStateOf<List<SowarImage>>(emptyList())
+        private set
+
+    /** True between a key press and its results, so the screen doesn't flash "no results". */
+    var isSearchPending by mutableStateOf(false)
+        private set
 
     val isSearching: Boolean get() = searchQuery.isNotBlank()
 
+    private var searchJob: Job? = null
+
     fun onSearchQueryChange(query: String) {
         searchQuery = query
+        searchJob?.cancel()
+        if (query.isBlank()) {
+            searchResults = emptyList()
+            isSearchPending = false
+            return
+        }
+        isSearchPending = true
+        // Searching thousands of photos on every letter would make cheap phones lag,
+        // so wait until the user pauses typing.
+        searchJob = viewModelScope.launch {
+            delay(SEARCH_DELAY_MILLIS)
+            search(query)
+        }
+    }
+
+    private suspend fun search(query: String) {
+        val current = catalog ?: return
+        val results = withContext(Dispatchers.Default) { current.search(query) }
+        if (query == searchQuery) {
+            searchResults = results
+            isSearchPending = false
+        }
+    }
+
+    // Last in the class on purpose: viewModelScope starts collecting right away, so every
+    // property above (searchQuery included) must already exist when these blocks run.
+    init {
+        viewModelScope.launch {
+            imageRepository.catalog.collect {
+                catalog = it
+                if (isSearching) search(searchQuery)
+            }
+        }
+        viewModelScope.launch { imageRepository.isRefreshing.collect { isRefreshing = it } }
+        viewModelScope.launch { imageRepository.lastRefreshFailed.collect { lastRefreshFailed = it } }
+    }
+
+    private companion object {
+        const val SEARCH_DELAY_MILLIS = 300L
     }
 }

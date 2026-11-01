@@ -9,10 +9,13 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import java.util.zip.GZIPInputStream
 
 /**
  * Gets the catalog from three places, best first:
- * 1. the internet ([catalogUrl]), which has the newest images;
+ * 1. the internet ([catalogUrl]), which has the newest images. It downloads the gzip copy
+ *    (about 10 times smaller), and asks the server to skip the download entirely when the
+ *    catalog hasn't changed since last time (ETag), so most app starts download almost nothing;
  * 2. the copy saved on the phone after the last successful download;
  * 3. the copy bundled inside the APK, so even the very first launch has something to show.
  */
@@ -23,27 +26,59 @@ class CatalogDataSource(
 ) {
     private val savedFile = File(context.filesDir, SAVED_FILE_NAME)
 
+    /** The server's version tag (ETag) of the saved copy, sent back so it can answer "unchanged". */
+    private val etagFile = File(context.filesDir, "$SAVED_FILE_NAME.etag")
+
+    /** What a download attempt found. */
+    sealed interface Download {
+        data class New(val catalog: Catalog) : Download
+        data object Unchanged : Download
+        data object Failed : Download
+    }
+
     /** The saved copy if there is one, otherwise the bundled one. Null only if both are missing or broken. */
     suspend fun loadOffline(): Catalog? = withContext(Dispatchers.IO) {
         readSaved() ?: readBundled()
     }
 
-    /** Downloads the newest catalog and saves it on the phone. Null if there's no internet or the file is broken. */
-    suspend fun download(): Catalog? = withContext(Dispatchers.IO) {
+    /** Downloads the newest catalog and saves it on the phone. [Download.Failed] if there's no internet or the file is broken. */
+    suspend fun download(): Download = withContext(Dispatchers.IO) {
         try {
-            val request = Request.Builder().url(catalogUrl).build()
-            val text = httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) error("HTTP ${response.code}")
-                response.body?.string() ?: error("Empty response")
-            }
-            val catalog = CatalogParser.parse(text)
-            save(text)
-            catalog
+            // Until the gzip copy exists online (it's made the first time the catalog is saved), use the plain one.
+            fetch("$catalogUrl.gz", gzipped = true) ?: fetch(catalogUrl, gzipped = false) ?: error("HTTP 404")
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
             Log.w(TAG, "Could not download the catalog", error)
-            null
+            Download.Failed
+        }
+    }
+
+    /** Null if [url] doesn't exist (404), so the caller can try another address. */
+    private fun fetch(url: String, gzipped: Boolean): Download? {
+        val request = Request.Builder().url(url)
+        val etag = if (savedFile.exists() && etagFile.exists()) etagFile.readText() else null
+        if (etag != null) request.header("If-None-Match", etag)
+        return httpClient.newCall(request.build()).execute().use { response ->
+            when {
+                response.code == 304 -> Download.Unchanged
+                response.code == 404 -> null
+                !response.isSuccessful -> error("HTTP ${response.code}")
+                else -> {
+                    val body = response.body ?: error("Empty response")
+                    val text = if (gzipped) {
+                        GZIPInputStream(body.byteStream()).bufferedReader().use { it.readText() }
+                    } else {
+                        body.string()
+                    }
+                    val catalog = CatalogParser.parse(text)
+                    save(text)
+                    // Both addresses have their own ETag, so keep only the one this copy came from.
+                    val newEtag = response.header("ETag")
+                    if (newEtag != null) etagFile.writeText(newEtag) else etagFile.delete()
+                    Download.New(catalog)
+                }
+            }
         }
     }
 
