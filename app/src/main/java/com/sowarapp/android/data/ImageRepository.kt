@@ -32,6 +32,14 @@ class ImageRepository(
     /** True while a download is running; the home screen shows its pull-to-refresh spinner. */
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
+    private val _lastRefreshFailed = MutableStateFlow(false)
+
+    /**
+     * True when the last check for new photos failed (no internet, or too slow). The app keeps
+     * showing the photos it has, and the home screen says why new ones may be missing.
+     */
+    val lastRefreshFailed: StateFlow<Boolean> = _lastRefreshFailed.asStateFlow()
+
     /** When the last download finished (SystemClock.elapsedRealtime), or 0 if never. */
     private var lastDownloadAt = 0L
 
@@ -67,9 +75,16 @@ class ImageRepository(
     }
 
     private suspend fun download() {
-        // Null means no internet: keep showing what we have, and try again next time.
-        val downloaded = dataSource.download() ?: return
-        _catalog.value = downloaded
+        when (val result = dataSource.download()) {
+            is CatalogDataSource.Download.New -> _catalog.value = result.catalog
+            CatalogDataSource.Download.Unchanged -> Unit  // what we show is already the newest
+            CatalogDataSource.Download.Failed -> {
+                // Keep showing what we have, and try again next time.
+                _lastRefreshFailed.value = true
+                return
+            }
+        }
+        _lastRefreshFailed.value = false
         lastDownloadAt = SystemClock.elapsedRealtime()
     }
 

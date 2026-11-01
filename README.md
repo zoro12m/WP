@@ -26,7 +26,7 @@ An Arabic-first Android app for browsing greeting images (صباح الخير، 
 
 The app reads [`catalog/catalog.json`](catalog/catalog.json): the list of categories and images, with a link to each photo.
 
-- **Online:** the app downloads the newest catalog from the R2 bucket (`catalog/catalog.json`) each time it starts (`CATALOG_URL` in `app/build.gradle.kts`). The admin page edits that file; the repo's copy is refreshed every night by **Actions → Save catalog copy**.
+- **Online:** the app downloads the newest catalog from the R2 bucket (`catalog/catalog.json`) each time it starts (`CATALOG_URL` in `app/build.gradle.kts`). It actually fetches the gzip copy next to it (`catalog.json.gz`, about 10 times smaller) and sends the last ETag, so an unchanged catalog costs almost nothing to check. The admin page and the tools write both files. The admin page edits that file; the repo's copy is refreshed every night by **Actions → Save catalog copy**.
 - **Offline:** it keeps the last downloaded copy on the phone, and the APK also includes a copy, so the first launch works without internet. The photos themselves still need internet the first time, and after that they come from Coil's cache.
 
 **Test images for now.** [`tools/build_test_catalog.py`](tools/build_test_catalog.py) picks photos from Wikimedia Commons "Quality images" whose license allows app use with credit (CC0, public domain, CC BY, then CC BY-SA if needed). The app shows the author and license under each photo. GitHub Actions runs the script and commits the result (**Actions → Build test catalog → Run workflow**). These images are only for testing and will be replaced by your own.

@@ -10,6 +10,8 @@ import PAGE from "./page.html";
 import HEIC2ANY from "heic2any/dist/heic2any.min.js";
 
 const CATALOG_KEY = "catalog/catalog.json";
+// A gzip copy for the app: about 10 times smaller, which matters once there are thousands of photos.
+const CATALOG_GZIP_KEY = "catalog/catalog.json.gz";
 // The app checks for a new catalog each time it starts; a short cache keeps that fresh.
 const CATALOG_CACHE = "public, max-age=60";
 // The file for an id never changes (a new photo gets a new id), so phones may keep it for a year.
@@ -23,6 +25,7 @@ const ID_PATTERN = /^[a-z0-9_]+$/;
 // Looks at a photo and picks its category (Cloudflare Workers AI, free daily allowance).
 const VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct";
 const MAX_SUGGEST_BYTES = 1024 * 1024;
+const AI_TIMEOUT_MS = 20_000;
 
 export default {
   async fetch(request, env) {
@@ -384,7 +387,8 @@ async function askVisionModel(env, bytes, prompt) {
   for (const [format, input] of Object.entries(formats)) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const result = await env.AI.run(VISION_MODEL, { ...input, max_tokens: 20, temperature: 0 });
+        const result = await withTimeout(env.AI.run(VISION_MODEL, { ...input, max_tokens: 20, temperature: 0 }),
+          AI_TIMEOUT_MS, "the AI took too long to answer");
         const answer = String(result?.response ?? "").trim();
         if (answer) return { answer, format, errors };
         errors[format] = "empty answer";
@@ -402,6 +406,13 @@ async function askVisionModel(env, bytes, prompt) {
     }
   }
   return { answer: "", format: null, errors };
+}
+
+/** Gives up on [promise] after [ms], so one slow answer never leaves the page waiting forever. */
+function withTimeout(promise, ms, message) {
+  let timer;
+  const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 function toBase64(bytes) {
@@ -446,9 +457,19 @@ async function updateCatalog(env, change) {
       onlyIf: { etagMatches: etag },
       httpMetadata: { contentType: "application/json; charset=utf-8", cacheControl: CATALOG_CACHE },
     });
-    if (saved) return json({ ok: true, ...result, total: catalog.items.length });
+    if (saved) {
+      await writeGzipCatalog(env, catalog);
+      return json({ ok: true, ...result, total: catalog.items.length });
+    }
   }
   throw new HttpError(409, "The catalog kept changing; please try again");
+}
+
+async function writeGzipCatalog(env, catalog) {
+  const gzipped = new Response(JSON.stringify(catalog)).body.pipeThrough(new CompressionStream("gzip"));
+  await env.BUCKET.put(CATALOG_GZIP_KEY, await new Response(gzipped).arrayBuffer(), {
+    httpMetadata: { contentType: "application/gzip", cacheControl: CATALOG_CACHE },
+  });
 }
 
 // ---------- Small helpers ----------

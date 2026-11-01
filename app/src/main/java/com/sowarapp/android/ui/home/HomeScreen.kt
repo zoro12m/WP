@@ -90,6 +90,10 @@ fun HomeScreen(
                 )
             }
 
+            if (viewModel.lastRefreshFailed && viewModel.isLoaded) {
+                fullWidthItem { RefreshFailedNote() }
+            }
+
             if (!viewModel.isLoaded) {
                 // The catalog is being read; this takes a split second.
             } else if (viewModel.categories.isEmpty()) {
@@ -103,12 +107,15 @@ fun HomeScreen(
             } else if (viewModel.isSearching) {
                 sectionTitle(R.string.section_search_results)
                 if (viewModel.searchResults.isEmpty()) {
-                    fullWidthItem {
-                        EmptyState(
-                            icon = Icons.Filled.Search,
-                            title = stringResource(R.string.search_empty_title),
-                            message = stringResource(R.string.search_empty_message),
-                        )
+                    // While the user is still typing, show nothing rather than "no results".
+                    if (!viewModel.isSearchPending) {
+                        fullWidthItem {
+                            EmptyState(
+                                icon = Icons.Filled.Search,
+                                title = stringResource(R.string.search_empty_title),
+                                message = stringResource(R.string.search_empty_message),
+                            )
+                        }
                     }
                 } else {
                     imageItems(viewModel.searchResults, openImage)
@@ -246,4 +253,18 @@ private fun CategoriesRow(
             )
         }
     }
+}
+
+/** Shown when the newest photos couldn't be downloaded; the photos already on the phone stay visible. */
+@Composable
+private fun RefreshFailedNote() {
+    Text(
+        text = stringResource(R.string.refresh_failed),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onErrorContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+    )
 }
